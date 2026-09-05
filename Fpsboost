@@ -1,0 +1,469 @@
+--==================================================
+-- EXTREME PERFORMANCE + GRAY SKY
+-- FPS / MS + PAUSAR + GUI FIXO NA TELA
+--==================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local Player = Players.LocalPlayer
+
+--==================================================
+-- CONFIG
+--==================================================
+
+local Paused = false
+local Locked = false
+
+--==================================================
+-- FPS BOOST
+--==================================================
+
+pcall(function()
+    if setfpscap then
+        setfpscap(0)
+    end
+end)
+
+pcall(function()
+    settings().Rendering.QualityLevel =
+        Enum.QualityLevel.Level01
+end)
+
+--==================================================
+-- GRAY SKY — SOMENTE O CÉU
+--==================================================
+
+local function ApplyGraySky()
+
+    if Paused then return end
+
+    pcall(function()
+
+        for _, obj in ipairs(Lighting:GetChildren()) do
+            if obj:IsA("Sky") then
+                obj:Destroy()
+            end
+        end
+
+        Lighting.Brightness = 1
+        Lighting.ClockTime = 12
+        Lighting.GlobalShadows = false
+
+        Lighting.Ambient =
+            Color3.fromRGB(128,128,128)
+
+        Lighting.OutdoorAmbient =
+            Color3.fromRGB(128,128,128)
+
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+
+        local atmosphere =
+            Lighting:FindFirstChildOfClass("Atmosphere")
+
+        if not atmosphere then
+            atmosphere = Instance.new("Atmosphere")
+            atmosphere.Name = "GraySkyAtmosphere"
+            atmosphere.Parent = Lighting
+        end
+
+        atmosphere.Color =
+            Color3.fromRGB(150,150,150)
+
+        atmosphere.Decay =
+            Color3.fromRGB(150,150,150)
+
+        atmosphere.Density = 0.35
+        atmosphere.Glare = 0
+        atmosphere.Haze = 0
+
+    end)
+end
+
+ApplyGraySky()
+
+--==================================================
+-- OTIMIZAR OBJETO
+--==================================================
+
+local function Optimize(obj)
+
+    if Paused then return end
+
+    pcall(function()
+
+        -- Partículas
+        if obj:IsA("ParticleEmitter")
+        or obj:IsA("Trail")
+        or obj:IsA("Beam")
+        or obj:IsA("Smoke")
+        or obj:IsA("Fire")
+        or obj:IsA("Sparkles") then
+
+            obj.Enabled = false
+        end
+
+        -- Luzes
+        if obj:IsA("PointLight")
+        or obj:IsA("SpotLight")
+        or obj:IsA("SurfaceLight") then
+
+            obj.Enabled = false
+            obj.Shadows = false
+        end
+
+        -- Sombras
+        if obj:IsA("BasePart") then
+            obj.CastShadow = false
+        end
+
+        -- Texturas
+        if obj:IsA("Decal")
+        or obj:IsA("Texture") then
+
+            obj.Transparency = 1
+        end
+
+        -- SurfaceAppearance
+        if obj:IsA("SurfaceAppearance") then
+            obj.Enabled = false
+        end
+
+        -- Mesh
+        if obj:IsA("MeshPart") then
+
+            pcall(function()
+                obj.RenderFidelity =
+                    Enum.RenderFidelity.Performance
+            end)
+
+            obj.CastShadow = false
+        end
+
+    end)
+end
+
+--==================================================
+-- OTIMIZAÇÃO INICIAL
+--==================================================
+
+task.spawn(function()
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+
+        if Paused then
+            break
+        end
+
+        Optimize(obj)
+
+        task.wait()
+
+    end
+
+end)
+
+--==================================================
+-- NOVOS OBJETOS
+--==================================================
+
+Workspace.DescendantAdded:Connect(function(obj)
+
+    if not Paused then
+        task.defer(function()
+            Optimize(obj)
+        end)
+    end
+
+end)
+
+--==================================================
+-- GUI
+--==================================================
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "PerformanceHUD"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = Player:WaitForChild("PlayerGui")
+
+local HUD = Instance.new("TextButton")
+
+HUD.Size = UDim2.new(0,155,0,80)
+HUD.Position = UDim2.new(0,10,0,10)
+
+HUD.BackgroundColor3 =
+    Color3.fromRGB(20,20,20)
+
+HUD.BackgroundTransparency = 0.15
+
+HUD.TextColor3 =
+    Color3.fromRGB(255,255,255)
+
+HUD.TextSize = 16
+HUD.Font = Enum.Font.GothamBold
+
+HUD.Text =
+    "FPS: --\nMS: --\n▶ TOQUE PARA PAUSAR"
+
+HUD.AutoButtonColor = false
+HUD.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0,12)
+Corner.Parent = HUD
+
+--==================================================
+-- LIMITAR GUI À TELA
+--==================================================
+
+local function KeepInsideScreen()
+
+    local Camera = Workspace.CurrentCamera
+    if not Camera then return end
+
+    local Viewport = Camera.ViewportSize
+
+    local size = HUD.AbsoluteSize
+    local pos = HUD.AbsolutePosition
+
+    local x = math.clamp(
+        pos.X,
+        0,
+        Viewport.X - size.X
+    )
+
+    local y = math.clamp(
+        pos.Y,
+        0,
+        Viewport.Y - size.Y
+    )
+
+    HUD.Position = UDim2.fromOffset(x,y)
+end
+
+--==================================================
+-- ARRASTAR GUI
+--==================================================
+
+local Dragging = false
+local DragStart
+local StartPosition
+
+HUD.InputBegan:Connect(function(input)
+
+    if input.UserInputType ==
+        Enum.UserInputType.MouseButton1
+        or input.UserInputType ==
+        Enum.UserInputType.Touch then
+
+        Dragging = true
+        DragStart = input.Position
+        StartPosition = HUD.Position
+
+    end
+
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+
+    if not Dragging then
+        return
+    end
+
+    if Locked then
+        return
+    end
+
+    if input.UserInputType ==
+        Enum.UserInputType.MouseMovement
+        or input.UserInputType ==
+        Enum.UserInputType.Touch then
+
+        local Delta =
+            input.Position - DragStart
+
+        HUD.Position = UDim2.new(
+            StartPosition.X.Scale,
+            StartPosition.X.Offset + Delta.X,
+
+            StartPosition.Y.Scale,
+            StartPosition.Y.Offset + Delta.Y
+        )
+
+        KeepInsideScreen()
+    end
+
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+
+    if input.UserInputType ==
+        Enum.UserInputType.MouseButton1
+        or input.UserInputType ==
+        Enum.UserInputType.Touch then
+
+        Dragging = false
+        KeepInsideScreen()
+
+    end
+
+end)
+
+--==================================================
+-- TOQUE = PAUSAR / CONTINUAR
+--==================================================
+
+HUD.Activated:Connect(function()
+
+    Paused = not Paused
+
+    if Paused then
+
+        HUD.Text =
+            "FPS: PAUSADO\nMS: PAUSADO\n▶ TOQUE PARA CONTINUAR"
+
+        HUD.TextColor3 =
+            Color3.fromRGB(255,180,80)
+
+    else
+
+        HUD.TextColor3 =
+            Color3.fromRGB(255,255,255)
+
+        HUD.Text =
+            "FPS: --\nMS: --\n▶ TOQUE PARA PAUSAR"
+
+        ApplyGraySky()
+
+    end
+
+end)
+
+--==================================================
+-- DUPLO TOQUE = FIXAR / SOLTAR
+--==================================================
+
+local LastTouch = 0
+
+HUD.InputBegan:Connect(function(input)
+
+    if input.UserInputType ~= Enum.UserInputType.Touch then
+        return
+    end
+
+    local now = os.clock()
+
+    if now - LastTouch <= 0.35 then
+
+        Locked = not Locked
+
+        if Locked then
+            HUD.TextColor3 =
+                Color3.fromRGB(255,80,80)
+        else
+            HUD.TextColor3 =
+                Color3.fromRGB(255,255,255)
+        end
+
+    end
+
+    LastTouch = now
+
+end)
+
+--==================================================
+-- FPS / MS
+--==================================================
+
+local Frames = 0
+local LastTime = os.clock()
+
+RunService.RenderStepped:Connect(function()
+
+    if Paused then
+        return
+    end
+
+    Frames += 1
+
+    local now = os.clock()
+
+    if now - LastTime >= 0.5 then
+
+        local FPS =
+            math.floor(
+                Frames / (now - LastTime) + 0.5
+            )
+
+        Frames = 0
+        LastTime = now
+
+        local Ping = 0
+
+        pcall(function()
+            Ping =
+                math.floor(
+                    Player:GetNetworkPing() * 1000 + 0.5
+                )
+        end)
+
+        HUD.Text =
+            "FPS: " .. FPS ..
+            "\nMS: " .. Ping ..
+            "\n▶ TOQUE PARA PAUSAR"
+
+    end
+
+end)
+
+--==================================================
+-- REAPLICAÇÃO
+--==================================================
+
+task.spawn(function()
+
+    while task.wait(3) do
+
+        if not Paused then
+
+            ApplyGraySky()
+
+            pcall(function()
+                settings().Rendering.QualityLevel =
+                    Enum.QualityLevel.Level01
+            end)
+
+            KeepInsideScreen()
+
+        end
+
+    end
+
+end)
+
+--==================================================
+-- GARANTIR GUI DENTRO DA TELA
+--==================================================
+
+task.spawn(function()
+
+    while task.wait(1) do
+        KeepInsideScreen()
+    end
+
+end)
+
+print("================================")
+print(" EXTREME PERFORMANCE ATIVADO")
+print(" GRAY SKY: ON")
+print(" FPS BOOST: ON")
+print(" ANTI-LAG: ON")
+print(" PAUSAR: TOQUE")
+print(" FIXAR: DUPLO TOQUE")
+print(" GUI: PRESO NA TELA")
+print("================================")
