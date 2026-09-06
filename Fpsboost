@@ -194,7 +194,7 @@ ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 local HUD = Instance.new("TextButton")
 
 HUD.Size = UDim2.new(0,155,0,80)
-HUD.Position = UDim2.new(0, 150, 0, 100)
+HUD.Position = UDim2.new(0, 200, 0, 100)
 
 HUD.BackgroundColor3 =
     Color3.fromRGB(20,20,20)
@@ -208,7 +208,7 @@ HUD.TextSize = 16
 HUD.Font = Enum.Font.GothamBold
 
 HUD.Text =
-    "FPS: --\nMS: --\n▶ TOQUE PARA PAUSAR"
+    "FPS: --\nMS: --\n▶TOQUE PAR PAUSAR"
 
 HUD.AutoButtonColor = false
 HUD.Parent = ScreenGui
