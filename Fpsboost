@@ -194,7 +194,7 @@ ScreenGui.Parent = Player:WaitForChild("PlayerGui")
 local HUD = Instance.new("TextButton")
 
 HUD.Size = UDim2.new(0,155,0,80)
-HUD.Position = UDim2.new(0, 200, 0, 100)
+HUD.Position = UDim2.new(0, 300, 0, 100)
 
 HUD.BackgroundColor3 =
     Color3.fromRGB(20,20,20)
