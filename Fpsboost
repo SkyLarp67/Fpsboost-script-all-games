@@ -1,450 +1,500 @@
 --==================================================
--- EXTREME PERFORMANCE + GRAY SKY
--- FPS / MS + PAUSAR + GUI FIXO NA TELA
+--        MOBILE PERFORMANCE OPTIMIZER
+--        GRAY SKY • FPS • MS • ANTI FREEZE
+--==================================================
+
+--==================================================
+-- SERVICES
 --==================================================
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 
 local Player = Players.LocalPlayer
 
 --==================================================
--- CONFIG
+-- CONFIGURATION
 --==================================================
 
-local Paused = false
-local Locked = false
+local Config = {
+    GraySky = true,
+    AntiFreeze = true,
+    LowTextures = true,
+    RemoveLights = true,
+    RemoveParticles = true,
+    FPSBoost = true,
+    AntiLag = true,
+
+    GrayColor = Color3.fromRGB(205, 205, 205),
+
+    DoubleTapTime = 0.30,
+
+    -- Posição responsiva
+    HUD_X = 0.34,
+    HUD_Y = 0.015
+}
+
+--==================================================
+-- STATE
+--==================================================
+
+local State = {
+    Paused = false,
+    LastTap = 0,
+    FPS = 0,
+    MS = 0
+}
+
+--==================================================
+-- GRAY SKY
+--==================================================
+
+local function ApplyGraySky()
+
+    if not Config.GraySky then
+        return
+    end
+
+    -- Remove Sky antigo
+    for _, object in ipairs(Lighting:GetChildren()) do
+        if object:IsA("Sky") then
+            object:Destroy()
+        end
+    end
+
+    -- Procura Atmosphere
+    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+
+    if not atmosphere then
+        atmosphere = Instance.new("Atmosphere")
+        atmosphere.Name = "PerformanceAtmosphere"
+        atmosphere.Parent = Lighting
+    end
+
+    -- Cinza claro sem neblina
+    atmosphere.Color = Config.GrayColor
+    atmosphere.Decay = Config.GrayColor
+    atmosphere.Glare = 0
+    atmosphere.Haze = 0
+    atmosphere.Density = 0
+    atmosphere.Offset = 0
+
+    -- Iluminação neutra
+    Lighting.Ambient = Config.GrayColor
+    Lighting.OutdoorAmbient = Config.GrayColor
+    Lighting.Brightness = 1
+end
+
+--==================================================
+-- REMOVE PARTICLES / EFFECTS
+--==================================================
+
+local function OptimizeEffects(object)
+
+    if not object or not object.Parent then
+        return
+    end
+
+    -- Partículas
+    if Config.RemoveParticles then
+
+        if object:IsA("ParticleEmitter") then
+            object.Enabled = false
+
+        elseif object:IsA("Trail") then
+            object.Enabled = false
+
+        elseif object:IsA("Beam") then
+            object.Enabled = false
+
+        elseif object:IsA("Smoke") then
+            object.Enabled = false
+
+        elseif object:IsA("Fire") then
+            object.Enabled = false
+
+        elseif object:IsA("Sparkles") then
+            object.Enabled = false
+        end
+    end
+
+    -- Luzes
+    if Config.RemoveLights then
+
+        if object:IsA("PointLight")
+        or object:IsA("SpotLight")
+        or object:IsA("SurfaceLight") then
+
+            object.Enabled = false
+        end
+    end
+
+    -- Sombras
+    if object:IsA("BasePart") then
+        pcall(function()
+            object.CastShadow = false
+        end)
+    end
+
+    -- Texturas
+    if Config.LowTextures then
+
+        if object:IsA("Decal")
+        or object:IsA("Texture") then
+
+            object.Transparency = 1
+        end
+
+        if object:IsA("SurfaceAppearance") then
+            object.Enabled = false
+        end
+    end
+
+    -- Renderização de Mesh
+    if object:IsA("MeshPart") then
+        pcall(function()
+            object.RenderFidelity = Enum.RenderFidelity.Performance
+        end)
+    end
+end
+
+--==================================================
+-- SCAN WORKSPACE
+--==================================================
+
+local function OptimizeWorkspace()
+
+    if State.Paused then
+        return
+    end
+
+    for _, object in ipairs(Workspace:GetDescendants()) do
+        OptimizeEffects(object)
+    end
+end
+
+--==================================================
+-- ANTI FREEZE
+--==================================================
+
+local function ApplyAntiFreeze()
+
+    if not Config.AntiFreeze then
+        return
+    end
+
+    -- Evita algumas configurações gráficas pesadas
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+
+    pcall(function()
+        Lighting.GlobalShadows = false
+    end)
+
+    pcall(function()
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+    end)
+end
 
 --==================================================
 -- FPS BOOST
 --==================================================
 
-pcall(function()
-    if setfpscap then
-        setfpscap(0)
+local function ApplyFPSBoost()
+
+    if not Config.FPSBoost then
+        return
     end
-end)
-
-pcall(function()
-    settings().Rendering.QualityLevel =
-        Enum.QualityLevel.Level01
-end)
-
---==================================================
--- OTIMIZAR OBJETO
---==================================================
-
-local function Optimize(obj)
-
-    if Paused then return end
 
     pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
 
-        -- Partículas
-        if obj:IsA("ParticleEmitter")
-        or obj:IsA("Trail")
-        or obj:IsA("Beam")
-        or obj:IsA("Smoke")
-        or obj:IsA("Fire")
-        or obj:IsA("Sparkles") then
+    pcall(function()
+        Lighting.GlobalShadows = false
+    end)
 
-            obj.Enabled = false
+    pcall(function()
+        Lighting.FogEnd = 100000
+    end)
+
+    -- Remove limite de FPS somente se o ambiente
+    -- disponibilizar essa função.
+    pcall(function()
+        if typeof(setfpscap) == "function" then
+            setfpscap(0)
         end
-
-        -- Luzes
-        if obj:IsA("PointLight")
-        or obj:IsA("SpotLight")
-        or obj:IsA("SurfaceLight") then
-
-            obj.Enabled = false
-            obj.Shadows = false
-        end
-
-        -- Sombras
-        if obj:IsA("BasePart") then
-            obj.CastShadow = false
-        end
-
-        -- Texturas
-        if obj:IsA("Decal")
-        or obj:IsA("Texture") then
-
-            obj.Transparency = 1
-        end
-
-        -- SurfaceAppearance
-        if obj:IsA("SurfaceAppearance") then
-            obj.Enabled = false
-        end
-
-        -- Mesh
-        if obj:IsA("MeshPart") then
-
-            pcall(function()
-                obj.RenderFidelity =
-                    Enum.RenderFidelity.Performance
-            end)
-
-            obj.CastShadow = false
-        end
-
     end)
 end
 
 --==================================================
--- OTIMIZAÇÃO INICIAL
+-- ANTI LAG
 --==================================================
 
-task.spawn(function()
+local function ApplyAntiLag()
 
-    for _, obj in ipairs(Workspace:GetDescendants()) do
+    if not Config.AntiLag then
+        return
+    end
 
-        if Paused then
-            break
+    -- Otimiza os objetos existentes
+    OptimizeWorkspace()
+
+    -- Reforça configurações leves
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+    end)
+end
+
+--==================================================
+-- INITIAL OPTIMIZATION
+--==================================================
+
+ApplyGraySky()
+ApplyAntiFreeze()
+ApplyFPSBoost()
+ApplyAntiLag()
+
+--==================================================
+-- NEW OBJECT OPTIMIZATION
+--==================================================
+
+local DescendantConnection
+
+DescendantConnection = Workspace.DescendantAdded:Connect(function(object)
+
+    if State.Paused then
+        return
+    end
+
+    -- Pequeno atraso para objetos que ainda estão
+    -- sendo montados pelo jogo.
+    task.defer(function()
+
+        if not State.Paused then
+            OptimizeEffects(object)
         end
 
-        Optimize(obj)
-
-        task.wait()
-
-    end
-
-end)
-
---==================================================
--- NOVOS OBJETOS
---==================================================
-
-Workspace.DescendantAdded:Connect(function(obj)
-
-    if not Paused then
-        task.defer(function()
-            Optimize(obj)
-        end)
-    end
-
+    end)
 end)
 
 --==================================================
 -- GUI
 --==================================================
 
+local OldGui = Player.PlayerGui:FindFirstChild("PerformanceOptimizer")
+
+if OldGui then
+    OldGui:Destroy()
+end
+
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "PerformanceHUD"
+ScreenGui.Name = "PerformanceOptimizer"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
-ScreenGui.Parent = Player:WaitForChild("PlayerGui")
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = Player.PlayerGui
+
+--==================================================
+-- HUD
+--==================================================
 
 local HUD = Instance.new("TextButton")
 
-HUD.Size = UDim2.new(0,155,0,80)
-HUD.Position = UDim2.new(0, 300, 0, 100)
+HUD.Name = "PerformanceHUD"
+HUD.Size = UDim2.fromOffset(220, 90)
 
-HUD.BackgroundColor3 =
-    Color3.fromRGB(20,20,20)
+-- Fica um pouco deslocado para o lado,
+-- mas continua responsivo.
+HUD.Position = UDim2.new(
+    Config.HUD_X,
+    0,
+    Config.HUD_Y,
+    0
+)
 
-HUD.BackgroundTransparency = 0.15
+HUD.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+HUD.BackgroundTransparency = 0.08
 
-HUD.TextColor3 =
-    Color3.fromRGB(255,255,255)
+HUD.BorderSizePixel = 0
 
+HUD.Text = "FPS: --\nMS: --\n▶ TOQUE PARA PAUSAR"
+
+HUD.TextColor3 = Color3.fromRGB(255, 255, 255)
 HUD.TextSize = 16
 HUD.Font = Enum.Font.GothamBold
 
-HUD.Text =
-    "FPS: --\nMS: --\n▶TOQUE PAR PAUSAR"
-
 HUD.AutoButtonColor = false
+
+HUD.Active = true
+HUD.Selectable = false
+
 HUD.Parent = ScreenGui
 
+--==================================================
+-- CORNER
+--==================================================
+
 local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0,12)
+Corner.CornerRadius = UDim.new(0, 14)
 Corner.Parent = HUD
 
 --==================================================
--- LIMITAR GUI À TELA
+-- STROKE
 --==================================================
 
-local function KeepInsideScreen()
-
-    local Camera = Workspace.CurrentCamera
-    if not Camera then return end
-
-    local Viewport = Camera.ViewportSize
-
-    local size = HUD.AbsoluteSize
-    local pos = HUD.AbsolutePosition
-
-    local x = math.clamp(
-        pos.X,
-        0,
-        Viewport.X - size.X
-    )
-
-    local y = math.clamp(
-        pos.Y,
-        0,
-        Viewport.Y - size.Y
-    )
-
-    HUD.Position = UDim2.fromOffset(x,y)
-end.
+local Stroke = Instance.new("UIStroke")
+Stroke.Thickness = 1
+Stroke.Transparency = 0.35
+Stroke.Color = Color3.fromRGB(120, 120, 120)
+Stroke.Parent = HUD
 
 --==================================================
--- GRAY SKY
---==================================================
-
-local Lighting = game:GetService("Lighting")
-
--- Remove o Sky existente
-for _, v in ipairs(Lighting:GetChildren()) do
-    if v:IsA("Sky") then
-        v:Destroy()
-    end
-end
-
--- Procura ou cria a Atmosphere
-local Atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-
-if not Atmosphere then
-    Atmosphere = Instance.new("Atmosphere")
-    Atmosphere.Parent = Lighting
-end
-
--- Cinza claro, sem neblina
-Atmosphere.Color = Color3.fromRGB(205, 205, 205)
-Atmosphere.Decay = Color3.fromRGB(205, 205, 205)
-Atmosphere.Glare = 0
-Atmosphere.Haze = 0
-Atmosphere.Density = 0
-Atmosphere.Offset = 0
-
--- Iluminação
-Lighting.Ambient = Color3.fromRGB(205, 205, 205)
-Lighting.OutdoorAmbient = Color3.fromRGB(205, 205, 205)
-Lighting.Brightness = 1
-
---==================================================
--- ARRASTAR GUI
---==================================================
-
-local Dragging = false
-local DragStart
-local StartPosition
-
-HUD.InputBegan:Connect(function(input)
-
-    if input.UserInputType ==
-        Enum.UserInputType.MouseButton1
-        or input.UserInputType ==
-        Enum.UserInputType.Touch then
-
-        Dragging = true
-        DragStart = input.Position
-        StartPosition = HUD.Position
-
-    end
-
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-
-    if not Dragging then
-        return
-    end
-
-    if Locked then
-        return
-    end
-
-    if input.UserInputType ==
-        Enum.UserInputType.MouseMovement
-        or input.UserInputType ==
-        Enum.UserInputType.Touch then
-
-        local Delta =
-            input.Position - DragStart
-
-        HUD.Position = UDim2.new(
-            StartPosition.X.Scale,
-            StartPosition.X.Offset + Delta.X,
-
-            StartPosition.Y.Scale,
-            StartPosition.Y.Offset + Delta.Y
-        )
-
-        KeepInsideScreen()
-    end
-
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-
-    if input.UserInputType ==
-        Enum.UserInputType.MouseButton1
-        or input.UserInputType ==
-        Enum.UserInputType.Touch then
-
-        Dragging = false
-        KeepInsideScreen()
-
-    end
-
-end)
-
---==================================================
--- TOQUE = PAUSAR / CONTINUAR
+-- PAUSE / UNPAUSE
 --==================================================
 
 HUD.Activated:Connect(function()
+    local now = os.clock()
 
-    Paused = not Paused
+    -- 1 toque: não faz nada
+    if now - State.LastTap > Config.DoubleTapTime then
+        State.LastTap = now
+        return
+    end
 
-    if Paused then
+    -- 2 toques: pausa/despausa
+    State.LastTap = 0
+    State.Paused = not State.Paused
 
-        HUD.Text =
-            "FPS: PAUSADO\nMS: PAUSADO\n▶ TOQUE PARA CONTINUAR"
+    if State.Paused then
+        -- Mantém o GUI exatamente onde está
+        HUD.Text = string.format(
+            "FPS: %d\nMS: %d\n⏸ PAUSADO",
+            State.FPS,
+            State.MS
+        )
 
-        HUD.TextColor3 =
-            Color3.fromRGB(255,180,80)
+        HUD.TextColor3 = Color3.fromRGB(255, 120, 120)
 
     else
+        HUD.TextColor3 = Color3.fromRGB(255, 255, 255)
 
-        HUD.TextColor3 =
-            Color3.fromRGB(255,255,255)
-
-        HUD.Text =
-            "FPS: --\nMS: --\n▶ TOQUE PARA PAUSAR"
-
-        ApplyGraySky()
-
+        HUD.Text = string.format(
+            "FPS: %d\nMS: %d\n▶ ATIVO",
+            State.FPS,
+            State.MS
+        )
     end
-
 end)
 
 --==================================================
--- DUPLO TOQUE = FIXAR / SOLTAR
+-- FPS COUNTER
 --==================================================
 
-local LastTouch = 0
+local FrameCounter = 0
+local LastFPSUpdate = os.clock()
 
-HUD.InputBegan:Connect(function(input)
+local RenderConnection
 
-    if input.UserInputType ~= Enum.UserInputType.Touch then
+RenderConnection = RunService.RenderStepped:Connect(function()
+
+    if State.Paused then
         return
     end
 
-    local now = os.clock()
+    FrameCounter += 1
 
-    if now - LastTouch <= 0.35 then
+    local CurrentTime = os.clock()
+    local Difference = CurrentTime - LastFPSUpdate
 
-        Locked = not Locked
+    if Difference >= 0.5 then
 
-        if Locked then
-            HUD.TextColor3 =
-                Color3.fromRGB(255,80,80)
-        else
-            HUD.TextColor3 =
-                Color3.fromRGB(255,255,255)
-        end
+        State.FPS = math.floor(FrameCounter / Difference + 0.5)
 
-    end
+        FrameCounter = 0
+        LastFPSUpdate = CurrentTime
 
-    LastTouch = now
-
-end)
-
---==================================================
--- FPS / MS
---==================================================
-
-local Frames = 0
-local LastTime = os.clock()
-
-RunService.RenderStepped:Connect(function()
-
-    if Paused then
-        return
-    end
-
-    Frames += 1
-
-    local now = os.clock()
-
-    if now - LastTime >= 0.5 then
-
-        local FPS =
-            math.floor(
-                Frames / (now - LastTime) + 0.5
-            )
-
-        Frames = 0
-        LastTime = now
-
+        -- Roblox fornece o ping em segundos
+        -- através de GetNetworkPing().
         local Ping = 0
 
         pcall(function()
-            Ping =
-                math.floor(
-                    Player:GetNetworkPing() * 1000 + 0.5
-                )
+            Ping = Player:GetNetworkPing() * 1000
         end)
 
-        HUD.Text =
-            "FPS: " .. FPS ..
-            "\nMS: " .. Ping ..
-            "\n▶ TOQUE PARA PAUSAR"
+        State.MS = math.floor(Ping + 0.5)
 
+        HUD.Text = string.format(
+            "FPS: %d\nMS: %d\n▶ TOQUE PARA PAUSAR",
+            State.FPS,
+            State.MS
+        )
     end
-
 end)
 
 --==================================================
--- REAPLICAÇÃO
+-- PERIODIC LIGHTWEIGHT CHECK
 --==================================================
 
 task.spawn(function()
 
-    while task.wait(3) do
+    while ScreenGui.Parent do
 
-        if not Paused then
+        task.wait(5)
+
+        if not State.Paused then
+
+            -- Não faz uma varredura a cada frame.
+            -- Isso evita que o próprio otimizador
+            -- cause queda de FPS.
 
             ApplyGraySky()
 
             pcall(function()
-                settings().Rendering.QualityLevel =
-                    Enum.QualityLevel.Level01
+                Lighting.GlobalShadows = false
             end)
 
-            KeepInsideScreen()
-
         end
+    end
+end)
 
+--==================================================
+-- CLEANUP
+--==================================================
+
+ScreenGui.Destroying:Connect(function()
+
+    if RenderConnection then
+        RenderConnection:Disconnect()
+    end
+
+    if DescendantConnection then
+        DescendantConnection:Disconnect()
     end
 
 end)
 
 --==================================================
--- GARANTIR GUI DENTRO DA TELA
+-- READY
 --==================================================
 
-task.spawn(function()
-
-    while task.wait(1) do
-        KeepInsideScreen()
-    end
-
-end)
-
-print("================================")
-print(" EXTREME PERFORMANCE ATIVADO")
-print(" GRAY SKY: ON")
-print(" FPS BOOST: ON")
-print(" ANTI-LAG: ON")
-print(" PAUSAR: TOQUE")
-print(" FIXAR: DUPLO TOQUE")
-print(" GUI: PRESO NA TELA")
-print("================================")
+print("======================================")
+print(" MOBILE PERFORMANCE OPTIMIZER")
+print(" Gray Sky: ON")
+print(" Anti Freeze: ON")
+print(" Low Texture: ON")
+print(" Lights: OFF")
+print(" Particles: OFF")
+print(" FPS Boost: ON")
+print(" Anti Lag: ON")
+print(" FPS / MS: ON")
+print(" Double Tap: ON")
+print(" HUD Lock: ON")
+print("======================================")
