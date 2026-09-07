@@ -191,7 +191,8 @@ local function KeepInsideScreen()
     )
 
     HUD.Position = UDim2.fromOffset(x,y)
-end
+end.
+
 --==================================================
 -- GRAY SKY
 --==================================================
@@ -213,17 +214,17 @@ if not Atmosphere then
     Atmosphere.Parent = Lighting
 end
 
--- Céu cinza
-Atmosphere.Color = Color3.fromRGB(155, 155, 155)
-Atmosphere.Decay = Color3.fromRGB(155, 155, 155)
+-- Cinza claro, sem neblina
+Atmosphere.Color = Color3.fromRGB(205, 205, 205)
+Atmosphere.Decay = Color3.fromRGB(205, 205, 205)
 Atmosphere.Glare = 0
 Atmosphere.Haze = 0
-Atmosphere.Density = 0.65
+Atmosphere.Density = 0
 Atmosphere.Offset = 0
 
--- Iluminação neutra
-Lighting.Ambient = Color3.fromRGB(155, 155, 155)
-Lighting.OutdoorAmbient = Color3.fromRGB(155, 155, 155)
+-- Iluminação
+Lighting.Ambient = Color3.fromRGB(205, 205, 205)
+Lighting.OutdoorAmbient = Color3.fromRGB(205, 205, 205)
 Lighting.Brightness = 1
 
 --==================================================
