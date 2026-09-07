@@ -1,6 +1,6 @@
 --==================================================
---        MOBILE PERFORMANCE OPTIMIZER
---        GRAY SKY • FPS • MS • ANTI FREEZE
+-- MOBILE PERFORMANCE OPTIMIZER
+-- GRAY SKY • FPS • MS • ANTI FREEZE
 --==================================================
 
 --==================================================
@@ -11,28 +11,29 @@ local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
 
 local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
 
 --==================================================
--- CONFIGURATION
+-- CONFIG
 --==================================================
 
 local Config = {
     GraySky = true,
-    AntiFreeze = true,
-    LowTextures = true,
-    RemoveLights = true,
     RemoveParticles = true,
-    FPSBoost = true,
-    AntiLag = true,
+    RemoveLights = true,
+    LowTextures = true,
+    DisableShadows = true,
+    LowMeshQuality = true,
 
-    GrayColor = Color3.fromRGB(205, 205, 205),
+    FPSBoost = true,
+    AntiFreeze = true,
+    AntiLag = true,
 
     DoubleTapTime = 0.30,
 
-    -- Posição responsiva
+    -- posição do HUD
     HUD_X = 0.34,
     HUD_Y = 0.015
 }
@@ -65,104 +66,152 @@ local function ApplyGraySky()
         end
     end
 
-    -- Procura Atmosphere
-    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+    local Atmosphere =
+        Lighting:FindFirstChild("PerformanceGrayAtmosphere")
 
-    if not atmosphere then
-        atmosphere = Instance.new("Atmosphere")
-        atmosphere.Name = "PerformanceAtmosphere"
-        atmosphere.Parent = Lighting
+    if not Atmosphere then
+
+        Atmosphere = Instance.new("Atmosphere")
+        Atmosphere.Name = "PerformanceGrayAtmosphere"
+        Atmosphere.Parent = Lighting
+
     end
 
-    -- Cinza claro sem neblina
-    atmosphere.Color = Config.GrayColor
-    atmosphere.Decay = Config.GrayColor
-    atmosphere.Glare = 0
-    atmosphere.Haze = 0
-    atmosphere.Density = 0
-    atmosphere.Offset = 0
+    -- Cinza claro
+    Atmosphere.Color =
+        Color3.fromRGB(205, 205, 205)
 
-    -- Iluminação neutra
-    Lighting.Ambient = Config.GrayColor
-    Lighting.OutdoorAmbient = Config.GrayColor
+    Atmosphere.Decay =
+        Color3.fromRGB(205, 205, 205)
+
+    -- Sem neblina
+    Atmosphere.Density = 0
+    Atmosphere.Haze = 0
+    Atmosphere.Glare = 0
+    Atmosphere.Offset = 0
+
+    -- Iluminação
+    Lighting.Ambient =
+        Color3.fromRGB(205, 205, 205)
+
+    Lighting.OutdoorAmbient =
+        Color3.fromRGB(205, 205, 205)
+
     Lighting.Brightness = 1
+
 end
 
 --==================================================
--- REMOVE PARTICLES / EFFECTS
+-- OBJECT OPTIMIZER
 --==================================================
 
-local function OptimizeEffects(object)
+local function OptimizeObject(object)
 
     if not object or not object.Parent then
         return
     end
 
-    -- Partículas
+    --------------------------------------------------
+    -- PARTICLES
+    --------------------------------------------------
+
     if Config.RemoveParticles then
 
-        if object:IsA("ParticleEmitter") then
-            object.Enabled = false
+        if object:IsA("ParticleEmitter")
+        or object:IsA("Trail")
+        or object:IsA("Beam")
+        or object:IsA("Smoke")
+        or object:IsA("Fire")
+        or object:IsA("Sparkles") then
 
-        elseif object:IsA("Trail") then
-            object.Enabled = false
+            pcall(function()
+                object.Enabled = false
+            end)
 
-        elseif object:IsA("Beam") then
-            object.Enabled = false
-
-        elseif object:IsA("Smoke") then
-            object.Enabled = false
-
-        elseif object:IsA("Fire") then
-            object.Enabled = false
-
-        elseif object:IsA("Sparkles") then
-            object.Enabled = false
         end
     end
 
-    -- Luzes
+    --------------------------------------------------
+    -- LIGHTS
+    --------------------------------------------------
+
     if Config.RemoveLights then
 
         if object:IsA("PointLight")
         or object:IsA("SpotLight")
         or object:IsA("SurfaceLight") then
 
-            object.Enabled = false
+            pcall(function()
+                object.Enabled = false
+            end)
+
         end
     end
 
-    -- Sombras
-    if object:IsA("BasePart") then
-        pcall(function()
-            object.CastShadow = false
-        end)
+    --------------------------------------------------
+    -- SHADOWS
+    --------------------------------------------------
+
+    if Config.DisableShadows then
+
+        if object:IsA("BasePart") then
+
+            pcall(function()
+                object.CastShadow = false
+            end)
+
+        end
+
     end
 
-    -- Texturas
+    --------------------------------------------------
+    -- TEXTURES
+    --------------------------------------------------
+
     if Config.LowTextures then
 
         if object:IsA("Decal")
         or object:IsA("Texture") then
 
-            object.Transparency = 1
+            pcall(function()
+                object.Transparency = 1
+            end)
+
         end
 
         if object:IsA("SurfaceAppearance") then
-            object.Enabled = false
+
+            pcall(function()
+                object.Enabled = false
+            end)
+
         end
+
     end
 
-    -- Renderização de Mesh
-    if object:IsA("MeshPart") then
-        pcall(function()
-            object.RenderFidelity = Enum.RenderFidelity.Performance
-        end)
+    --------------------------------------------------
+    -- MESH
+    --------------------------------------------------
+
+    if Config.LowMeshQuality then
+
+        if object:IsA("MeshPart") then
+
+            pcall(function()
+
+                object.RenderFidelity =
+                    Enum.RenderFidelity.Performance
+
+            end)
+
+        end
+
     end
+
 end
 
 --==================================================
--- SCAN WORKSPACE
+-- WORKSPACE OPTIMIZATION
 --==================================================
 
 local function OptimizeWorkspace()
@@ -172,135 +221,123 @@ local function OptimizeWorkspace()
     end
 
     for _, object in ipairs(Workspace:GetDescendants()) do
-        OptimizeEffects(object)
+
+        OptimizeObject(object)
+
     end
+
 end
 
 --==================================================
--- ANTI FREEZE
+-- LIGHTING OPTIMIZATION
 --==================================================
 
-local function ApplyAntiFreeze()
+local function OptimizeLighting()
 
-    if not Config.AntiFreeze then
+    if State.Paused then
         return
     end
 
-    -- Evita algumas configurações gráficas pesadas
     pcall(function()
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-    end)
 
-    pcall(function()
         Lighting.GlobalShadows = false
-    end)
 
-    pcall(function()
         Lighting.EnvironmentDiffuseScale = 0
         Lighting.EnvironmentSpecularScale = 0
+
     end)
+
 end
 
 --==================================================
--- FPS BOOST
+-- GRAPHICS OPTIMIZATION
 --==================================================
 
-local function ApplyFPSBoost()
+local function ApplyGraphicsOptimization()
 
     if not Config.FPSBoost then
         return
     end
 
     pcall(function()
-        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+
+        settings().Rendering.QualityLevel =
+            Enum.QualityLevel.Level01
+
     end)
 
     pcall(function()
+
         Lighting.GlobalShadows = false
+
     end)
 
+    -- Só funciona em ambientes que disponibilizam
+    -- essa função.
     pcall(function()
-        Lighting.FogEnd = 100000
-    end)
 
-    -- Remove limite de FPS somente se o ambiente
-    -- disponibilizar essa função.
-    pcall(function()
         if typeof(setfpscap) == "function" then
             setfpscap(0)
         end
+
     end)
+
 end
 
 --==================================================
--- ANTI LAG
---==================================================
-
-local function ApplyAntiLag()
-
-    if not Config.AntiLag then
-        return
-    end
-
-    -- Otimiza os objetos existentes
-    OptimizeWorkspace()
-
-    -- Reforça configurações leves
-    pcall(function()
-        Lighting.GlobalShadows = false
-        Lighting.EnvironmentDiffuseScale = 0
-        Lighting.EnvironmentSpecularScale = 0
-    end)
-end
-
---==================================================
--- INITIAL OPTIMIZATION
+-- INITIALIZATION
 --==================================================
 
 ApplyGraySky()
-ApplyAntiFreeze()
-ApplyFPSBoost()
-ApplyAntiLag()
+ApplyGraphicsOptimization()
+OptimizeLighting()
+OptimizeWorkspace()
 
 --==================================================
--- NEW OBJECT OPTIMIZATION
+-- NEW OBJECTS
 --==================================================
 
-local DescendantConnection
+local ObjectConnection
 
-DescendantConnection = Workspace.DescendantAdded:Connect(function(object)
+ObjectConnection =
+    Workspace.DescendantAdded:Connect(function(object)
 
-    if State.Paused then
-        return
-    end
-
-    -- Pequeno atraso para objetos que ainda estão
-    -- sendo montados pelo jogo.
-    task.defer(function()
-
-        if not State.Paused then
-            OptimizeEffects(object)
+        if State.Paused then
+            return
         end
 
+        task.defer(function()
+
+            if not State.Paused then
+                OptimizeObject(object)
+            end
+
+        end)
+
     end)
-end)
 
 --==================================================
 -- GUI
 --==================================================
 
-local OldGui = Player.PlayerGui:FindFirstChild("PerformanceOptimizer")
+local OldGui =
+    PlayerGui:FindFirstChild("PerformanceOptimizer")
 
 if OldGui then
     OldGui:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "PerformanceOptimizer"
+
+ScreenGui.Name =
+    "PerformanceOptimizer"
+
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent = Player.PlayerGui
+ScreenGui.ZIndexBehavior =
+    Enum.ZIndexBehavior.Sibling
+
+ScreenGui.Parent = PlayerGui
 
 --==================================================
 -- HUD
@@ -309,25 +346,31 @@ ScreenGui.Parent = Player.PlayerGui
 local HUD = Instance.new("TextButton")
 
 HUD.Name = "PerformanceHUD"
-HUD.Size = UDim2.fromOffset(220, 90)
 
--- Fica um pouco deslocado para o lado,
--- mas continua responsivo.
-HUD.Position = UDim2.new(
-    Config.HUD_X,
-    0,
-    Config.HUD_Y,
-    0
-)
+HUD.Size =
+    UDim2.fromOffset(220, 90)
 
-HUD.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+HUD.Position =
+    UDim2.new(
+        Config.HUD_X,
+        0,
+        Config.HUD_Y,
+        0
+    )
+
+HUD.BackgroundColor3 =
+    Color3.fromRGB(35, 35, 35)
+
 HUD.BackgroundTransparency = 0.08
 
 HUD.BorderSizePixel = 0
 
-HUD.Text = "FPS: --\nMS: --\n▶ TOQUE PARA PAUSAR"
+HUD.Text =
+    "FPS: --\nMS: --\n▶ ATIVO"
 
-HUD.TextColor3 = Color3.fromRGB(255, 255, 255)
+HUD.TextColor3 =
+    Color3.fromRGB(255, 255, 255)
+
 HUD.TextSize = 16
 HUD.Font = Enum.Font.GothamBold
 
@@ -336,111 +379,174 @@ HUD.AutoButtonColor = false
 HUD.Active = true
 HUD.Selectable = false
 
+-- NÃO permite arrastar
+HUD.Draggable = false
+
 HUD.Parent = ScreenGui
 
 --==================================================
--- CORNER
+-- ROUNDED CORNER
 --==================================================
 
 local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0, 14)
+
+Corner.CornerRadius =
+    UDim.new(0, 14)
+
 Corner.Parent = HUD
 
 --==================================================
--- STROKE
+-- BORDER
 --==================================================
 
 local Stroke = Instance.new("UIStroke")
+
 Stroke.Thickness = 1
 Stroke.Transparency = 0.35
-Stroke.Color = Color3.fromRGB(120, 120, 120)
+
+Stroke.Color =
+    Color3.fromRGB(120, 120, 120)
+
 Stroke.Parent = HUD
 
 --==================================================
--- PAUSE / UNPAUSE
+-- DOUBLE TAP
 --==================================================
 
 HUD.Activated:Connect(function()
+
     local now = os.clock()
 
-    -- 1 toque: não faz nada
-    if now - State.LastTap > Config.DoubleTapTime then
+    --------------------------------------------------
+    -- PRIMEIRO TOQUE
+    --------------------------------------------------
+
+    if now - State.LastTap >
+        Config.DoubleTapTime then
+
         State.LastTap = now
+
+        -- Um toque não faz nada
         return
     end
 
-    -- 2 toques: pausa/despausa
+    --------------------------------------------------
+    -- SEGUNDO TOQUE
+    --------------------------------------------------
+
     State.LastTap = 0
-    State.Paused = not State.Paused
+
+    State.Paused =
+        not State.Paused
+
+    --------------------------------------------------
+    -- PAUSADO
+    --------------------------------------------------
 
     if State.Paused then
-        -- Mantém o GUI exatamente onde está
+
         HUD.Text = string.format(
             "FPS: %d\nMS: %d\n⏸ PAUSADO",
             State.FPS,
             State.MS
         )
 
-        HUD.TextColor3 = Color3.fromRGB(255, 120, 120)
+        HUD.TextColor3 =
+            Color3.fromRGB(255, 130, 130)
+
+    --------------------------------------------------
+    -- ATIVO
+    --------------------------------------------------
 
     else
-        HUD.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+        HUD.TextColor3 =
+            Color3.fromRGB(255, 255, 255)
 
         HUD.Text = string.format(
             "FPS: %d\nMS: %d\n▶ ATIVO",
             State.FPS,
             State.MS
         )
+
+        task.spawn(function()
+
+            ApplyGraySky()
+            ApplyGraphicsOptimization()
+            OptimizeLighting()
+            OptimizeWorkspace()
+
+        end)
+
     end
+
 end)
 
 --==================================================
--- FPS COUNTER
+-- FPS / MS MONITOR
 --==================================================
 
 local FrameCounter = 0
-local LastFPSUpdate = os.clock()
+local LastUpdate = os.clock()
 
 local RenderConnection
 
-RenderConnection = RunService.RenderStepped:Connect(function()
+RenderConnection =
+    RunService.RenderStepped:Connect(function()
 
-    if State.Paused then
-        return
-    end
+        if State.Paused then
+            return
+        end
 
-    FrameCounter += 1
+        FrameCounter += 1
 
-    local CurrentTime = os.clock()
-    local Difference = CurrentTime - LastFPSUpdate
+        local now = os.clock()
+        local elapsed =
+            now - LastUpdate
 
-    if Difference >= 0.5 then
+        if elapsed >= 0.5 then
 
-        State.FPS = math.floor(FrameCounter / Difference + 0.5)
+            State.FPS =
+                math.floor(
+                    FrameCounter / elapsed + 0.5
+                )
 
-        FrameCounter = 0
-        LastFPSUpdate = CurrentTime
+            FrameCounter = 0
+            LastUpdate = now
 
-        -- Roblox fornece o ping em segundos
-        -- através de GetNetworkPing().
-        local Ping = 0
+            --------------------------------------------------
+            -- PING / MS
+            --------------------------------------------------
 
-        pcall(function()
-            Ping = Player:GetNetworkPing() * 1000
-        end)
+            local Ping = 0
 
-        State.MS = math.floor(Ping + 0.5)
+            pcall(function()
 
-        HUD.Text = string.format(
-            "FPS: %d\nMS: %d\n▶ TOQUE PARA PAUSAR",
-            State.FPS,
-            State.MS
-        )
-    end
-end)
+                Ping =
+                    Player:GetNetworkPing()
+                    * 1000
+
+            end)
+
+            State.MS =
+                math.floor(Ping + 0.5)
+
+            --------------------------------------------------
+            -- HUD
+            --------------------------------------------------
+
+            HUD.Text = string.format(
+                "FPS: %d\nMS: %d\n▶ ATIVO",
+                State.FPS,
+                State.MS
+            )
+
+        end
+
+    end)
 
 --==================================================
--- PERIODIC LIGHTWEIGHT CHECK
+-- LIGHTWEIGHT MAINTENANCE
 --==================================================
 
 task.spawn(function()
@@ -451,18 +557,16 @@ task.spawn(function()
 
         if not State.Paused then
 
-            -- Não faz uma varredura a cada frame.
-            -- Isso evita que o próprio otimizador
-            -- cause queda de FPS.
+            -- Não executamos uma varredura
+            -- a cada frame.
 
             ApplyGraySky()
-
-            pcall(function()
-                Lighting.GlobalShadows = false
-            end)
+            OptimizeLighting()
 
         end
+
     end
+
 end)
 
 --==================================================
@@ -475,8 +579,8 @@ ScreenGui.Destroying:Connect(function()
         RenderConnection:Disconnect()
     end
 
-    if DescendantConnection then
-        DescendantConnection:Disconnect()
+    if ObjectConnection then
+        ObjectConnection:Disconnect()
     end
 
 end)
@@ -487,14 +591,17 @@ end)
 
 print("======================================")
 print(" MOBILE PERFORMANCE OPTIMIZER")
-print(" Gray Sky: ON")
-print(" Anti Freeze: ON")
-print(" Low Texture: ON")
-print(" Lights: OFF")
-print(" Particles: OFF")
-print(" FPS Boost: ON")
-print(" Anti Lag: ON")
-print(" FPS / MS: ON")
-print(" Double Tap: ON")
-print(" HUD Lock: ON")
+print("======================================")
+print("GRAY SKY       : ON")
+print("PARTICLES      : OFF")
+print("LIGHTS         : OFF")
+print("SHADOWS        : OFF")
+print("LOW TEXTURES   : ON")
+print("LOW MESH       : ON")
+print("FPS BOOST      : ON")
+print("ANTI FREEZE    : ON")
+print("ANTI LAG       : ON")
+print("FPS / MS       : ON")
+print("DOUBLE TAP     : ON")
+print("HUD LOCK       : ON")
 print("======================================")
