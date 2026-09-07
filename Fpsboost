@@ -192,6 +192,39 @@ local function KeepInsideScreen()
 
     HUD.Position = UDim2.fromOffset(x,y)
 end
+--==================================================
+-- GRAY SKY
+--==================================================
+
+local Lighting = game:GetService("Lighting")
+
+-- Remove o Sky existente
+for _, v in ipairs(Lighting:GetChildren()) do
+    if v:IsA("Sky") then
+        v:Destroy()
+    end
+end
+
+-- Procura ou cria a Atmosphere
+local Atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+
+if not Atmosphere then
+    Atmosphere = Instance.new("Atmosphere")
+    Atmosphere.Parent = Lighting
+end
+
+-- Céu cinza
+Atmosphere.Color = Color3.fromRGB(155, 155, 155)
+Atmosphere.Decay = Color3.fromRGB(155, 155, 155)
+Atmosphere.Glare = 0
+Atmosphere.Haze = 0
+Atmosphere.Density = 0.65
+Atmosphere.Offset = 0
+
+-- Iluminação neutra
+Lighting.Ambient = Color3.fromRGB(155, 155, 155)
+Lighting.OutdoorAmbient = Color3.fromRGB(155, 155, 155)
+Lighting.Brightness = 1
 
 --==================================================
 -- ARRASTAR GUI
