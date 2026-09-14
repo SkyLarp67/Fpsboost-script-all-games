@@ -1,0 +1,3174 @@
+--==================================================--
+-- SKYLARP V2
+-- EXTREME PERFORMANCE + REAL SCREEN STRETCH
+-- AUTO SAVE + SKY SELECTOR
+-- FPS / MS + MOBILE GUI
+--==================================================--
+
+--==================================================--
+-- CONFIG
+--==================================================--
+
+local CONFIG = {
+    FPSCap = 360,
+
+    StretchDefault = 0.75,
+    StretchMin = 0.30,
+    StretchMax = 2.00,
+
+    GUIName = "Skylarp",
+
+    AutoSave = true,
+    SaveFile = "SKYLARP_Settings.json",
+
+    Performance = {
+        NoCameraEffects = false,
+        NoClothes = false,
+        LowWaterGraphics = false,
+        NoShadows = true,
+        LowRendering = true,
+        LowQualityParts = true,
+        LowQualityModels = true,
+        ResetMaterials = true,
+        RemoveParticles = true,
+        RemoveLights = true,
+    }
+}
+
+--==================================================--
+-- SERVICES
+--==================================================--
+
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
+local InsertService = game:GetService("InsertService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+if not LocalPlayer then
+    return
+end
+
+--==================================================--
+-- SKY LIST
+--==================================================--
+
+local SKY_LIST = {
+
+    -- NOVOS CÉUS
+    {
+        Name = "Minecraft Sky",
+        Id = 10594760952
+    },
+
+    {
+        Name = "Cloudy Sky",
+        Id = 10594745862
+    },
+
+    {
+        Name = "Spiral Galaxy Skybox",
+        Id = 91546602453505
+    },
+
+    {
+        Name = "Frigid Cirrostratus",
+        Id = 9671975815
+    },
+
+    {
+        Name = "Classic Roblox Sky",
+        Id = 339406852
+    },
+
+    -- CÉUS ANTERIORES
+    {
+        Name = "Firestarter",
+        Id = 102568900092902
+    },
+
+    {
+        Name = "Artificial Mountains",
+        Id = 77040099018770
+    },
+
+    {
+        Name = "Snow Skybox",
+        Id = 90924457311797
+    },
+
+    {
+        Name = "False Paradise",
+        Id = 105230253467395
+    },
+
+    {
+        Name = "Skybox by Kelvin",
+        Id = 140307474008766
+    },
+
+    {
+        Name = "Visage Skybox",
+        Id = 541222532
+    },
+
+    {
+        Name = "Sky BNU",
+        Id = 98501515261292
+    },
+
+    {
+        Name = "Supermassive Black Hole",
+        Id = 109488540432307
+    },
+
+    {
+        Name = "Sky",
+        Id = 8878337374
+    },
+
+    {
+        Name = "Sky Classic",
+        Id = 3241854224
+    },
+
+    {
+        Name = "Minecraft Sky Old",
+        Id = 79465052938925
+    },
+
+    {
+        Name = "Sky Sunset",
+        Id = 132703927222924
+    }
+}
+
+--==================================================--
+-- SAFE FUNCTIONS
+--==================================================--
+
+local function SafeSet(object, property, value)
+    if not object then
+        return false
+    end
+
+    return pcall(function()
+        object[property] = value
+    end)
+end
+
+local function SafeGet(object, property)
+    if not object then
+        return nil
+    end
+
+    local value
+
+    pcall(function()
+        value = object[property]
+    end)
+
+    return value
+end
+
+local function SafeDestroy(object)
+    if not object then
+        return
+    end
+
+    pcall(function()
+        object:Destroy()
+    end)
+end
+
+--==================================================--
+-- AUTO SAVE
+--==================================================--
+
+local SavedSettings = {}
+
+local function CanUseFileSystem()
+    return typeof(readfile) == "function"
+        and typeof(writefile) == "function"
+end
+
+local function SaveSettings()
+    if not CONFIG.AutoSave then
+        return
+    end
+
+    if not CanUseFileSystem() then
+        return
+    end
+
+    local data = {
+        StretchValue = StretchValue or CONFIG.StretchDefault,
+        StretchEnabled = StretchEnabled or false,
+
+        Performance = {}
+    }
+
+    for name, value in pairs(CONFIG.Performance) do
+        data.Performance[name] = value
+    end
+
+    local success, encoded = pcall(function()
+        return game:GetService("HttpService"):JSONEncode(data)
+    end)
+
+    if not success or not encoded then
+        return
+    end
+
+    pcall(function()
+        writefile(CONFIG.SaveFile, encoded)
+    end)
+end
+
+local function LoadSettings()
+    if not CanUseFileSystem() then
+        return
+    end
+
+    local success, content = pcall(function()
+        return readfile(CONFIG.SaveFile)
+    end)
+
+    if not success or not content then
+        return
+    end
+
+    local ok, data = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(content)
+    end)
+
+    if not ok or type(data) ~= "table" then
+        return
+    end
+
+    SavedSettings = data
+end
+
+LoadSettings()
+
+--==================================================--
+-- FPS CAP
+--==================================================--
+
+pcall(function()
+    if typeof(setfpscap) == "function" then
+        setfpscap(CONFIG.FPSCap)
+    end
+end)
+
+--==================================================--
+-- PERFORMANCE
+--==================================================--
+
+local PerformanceConnections = {}
+local CharacterConnections = {}
+
+local function DisconnectConnection(connection)
+    if connection then
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+end
+
+local function DisconnectList(list)
+    for key, connection in pairs(list) do
+        DisconnectConnection(connection)
+        list[key] = nil
+    end
+end
+
+local function IsCharacterPart(object)
+    if not object then
+        return false
+    end
+
+    local model = object:FindFirstAncestorOfClass("Model")
+
+    if not model then
+        return false
+    end
+
+    return Players:GetPlayerFromCharacter(model) ~= nil
+end
+
+local function ApplyNoCameraEffects()
+    if not CONFIG.Performance.NoCameraEffects then
+        return
+    end
+
+    pcall(function()
+        for _, object in ipairs(Lighting:GetChildren()) do
+            if object:IsA("PostEffect") then
+                SafeDestroy(object)
+            end
+        end
+    end)
+end
+
+local function ApplyNoClothes(object)
+    if not CONFIG.Performance.NoClothes then
+        return
+    end
+
+    if not object then
+        return
+    end
+
+    pcall(function()
+        if object:IsA("Shirt")
+            or object:IsA("Pants")
+            or object:IsA("ShirtGraphic")
+            or object:IsA("CharacterMesh") then
+
+            SafeDestroy(object)
+            return
+        end
+
+        if object:IsA("Accessory") and IsCharacterPart(object) then
+            SafeDestroy(object)
+        end
+    end)
+end
+
+local function ApplyLowWater(object)
+    if not CONFIG.Performance.LowWaterGraphics then
+        return
+    end
+
+    if not object then
+        return
+    end
+
+    pcall(function()
+        if object:IsA("Terrain") then
+            SafeSet(object, "WaterWaveSize", 0)
+            SafeSet(object, "WaterWaveSpeed", 0)
+            SafeSet(object, "WaterReflectance", 0)
+            SafeSet(object, "WaterTransparency", 1)
+        end
+    end)
+end
+
+local function ApplyNoShadows(object)
+    if not CONFIG.Performance.NoShadows then
+        return
+    end
+
+    if not object then
+        return
+    end
+
+    pcall(function()
+        if object:IsA("BasePart") then
+            SafeSet(object, "CastShadow", false)
+        end
+    end)
+end
+
+local function ApplyLowRendering()
+    if not CONFIG.Performance.LowRendering then
+        return
+    end
+
+    pcall(function()
+        settings().Rendering.QualityLevel =
+            Enum.QualityLevel.Level01
+    end)
+
+    pcall(function()
+        Lighting.GlobalShadows = false
+    end)
+end
+
+local function ApplyLowQualityParts(object)
+    if not CONFIG.Performance.LowQualityParts then
+        return
+    end
+
+    if not object then
+        return
+    end
+
+    pcall(function()
+        if object:IsA("BasePart") then
+
+            SafeSet(
+                object,
+                "Reflectance",
+                0
+            )
+
+            SafeSet(
+                object,
+                "Material",
+                Enum.Material.SmoothPlastic
+            )
+
+            if object:IsA("MeshPart") then
+                SafeSet(
+                    object,
+                    "RenderFidelity",
+                    Enum.RenderFidelity.Performance
+                )
+            end
+        end
+    end)
+end
+
+local function ApplyLowQualityModels(object)
+    if not CONFIG.Performance.LowQualityModels then
+        return
+    end
+
+    if not object then
+        return
+    end
+
+    pcall(function()
+        if object:IsA("MeshPart") then
+
+            SafeSet(
+                object,
+                "RenderFidelity",
+                Enum.RenderFidelity.Performance
+            )
+
+        elseif object:IsA("BasePart") then
+
+            SafeSet(
+                object,
+                "CastShadow",
+                false
+            )
+        end
+    end)
+end
+
+local function ApplyResetMaterials(object)
+    if not CONFIG.Performance.ResetMaterials then
+        return
+    end
+
+    if not object then
+        return
+    end
+
+    pcall(function()
+        if object:IsA("BasePart") then
+            SafeSet(
+                object,
+                "Material",
+                Enum.Material.SmoothPlastic
+            )
+
+            SafeSet(
+                object,
+                "Reflectance",
+                0
+            )
+        end
+    end)
+end
+
+local function ApplyRemoveParticles(object)
+    if not CONFIG.Performance.RemoveParticles then
+        return
+    end
+
+    if not object then
+        return
+    end
+
+    pcall(function()
+
+        if object:IsA("ParticleEmitter")
+            or object:IsA("Trail")
+            or object:IsA("Beam")
+            or object:IsA("Smoke")
+            or object:IsA("Fire")
+            or object:IsA("Sparkles") then
+
+            SafeDestroy(object)
+
+        end
+    end)
+end
+
+local function ApplyRemoveLights(object)
+    if not CONFIG.Performance.RemoveLights then
+        return
+    end
+
+    if not object then
+        return
+    end
+
+    pcall(function()
+
+        if object:IsA("PointLight")
+            or object:IsA("SpotLight")
+            or object:IsA("SurfaceLight") then
+
+            SafeDestroy(object)
+
+        end
+    end)
+end
+
+local function ApplyPerformanceObject(object)
+
+    if not object or not object.Parent then
+        return
+    end
+
+    ApplyNoClothes(object)
+    ApplyNoShadows(object)
+    ApplyLowQualityParts(object)
+    ApplyLowQualityModels(object)
+    ApplyResetMaterials(object)
+    ApplyRemoveParticles(object)
+    ApplyRemoveLights(object)
+end
+
+local function ScanWorkspaceOnce()
+
+    pcall(function()
+
+        for _, object in ipairs(
+            Workspace:GetDescendants()
+        ) do
+
+            ApplyPerformanceObject(object)
+
+        end
+
+    end)
+
+    ApplyNoCameraEffects()
+    ApplyLowRendering()
+
+    ApplyLowWater(
+        Workspace:FindFirstChildOfClass("Terrain")
+    )
+end
+
+local function SetupPerformanceConnections()
+
+    DisconnectList(
+        PerformanceConnections
+    )
+
+    PerformanceConnections.DescendantAdded =
+        Workspace.DescendantAdded:Connect(function(object)
+
+            task.defer(function()
+
+                if object and object.Parent then
+                    ApplyPerformanceObject(object)
+                end
+
+            end)
+
+        end)
+
+    PerformanceConnections.LightingAdded =
+        Lighting.ChildAdded:Connect(function(object)
+
+            task.defer(function()
+
+                ApplyNoCameraEffects()
+
+                if object then
+                    ApplyRemoveLights(object)
+                end
+
+            end)
+
+        end)
+end
+
+--==================================================--
+-- STRETCHER
+-- REAL SCREEN STRETCH METHOD
+--==================================================--
+
+local StretchEnabled = false
+local StretchValue = CONFIG.StretchDefault
+local StretchConnection = nil
+
+if type(SavedSettings.StretchValue) == "number" then
+
+    StretchValue = math.clamp(
+        SavedSettings.StretchValue,
+        CONFIG.StretchMin,
+        CONFIG.StretchMax
+    )
+
+end
+
+if type(SavedSettings.StretchEnabled) == "boolean" then
+    StretchEnabled = SavedSettings.StretchEnabled
+end
+
+if type(SavedSettings.Performance) == "table" then
+
+    for option, value in pairs(
+        SavedSettings.Performance
+    ) do
+
+        if CONFIG.Performance[option] ~= nil
+            and type(value) == "boolean" then
+
+            CONFIG.Performance[option] = value
+
+        end
+
+    end
+
+end
+
+local function DisconnectStretch()
+
+    if StretchConnection then
+
+        pcall(function()
+            StretchConnection:Disconnect()
+        end)
+
+        StretchConnection = nil
+
+    end
+end
+
+local function ApplyRealStretch()
+
+    if not StretchEnabled then
+        return
+    end
+
+    local Camera = Workspace.CurrentCamera
+
+    if not Camera then
+        return
+    end
+
+    local scale = math.clamp(
+        StretchValue,
+        CONFIG.StretchMin,
+        CONFIG.StretchMax
+    )
+
+    pcall(function()
+
+        Camera.CFrame =
+            Camera.CFrame
+            * CFrame.new(
+                0,
+                0,
+                0,
+                1, 0, 0,
+                0, scale, 0,
+                0, 0, 1
+            )
+
+    end)
+end
+
+local function SetStretchEnabled(enabled)
+
+    StretchEnabled = enabled
+
+    DisconnectStretch()
+
+    if StretchEnabled then
+
+        StretchConnection =
+            RunService.RenderStepped:Connect(
+                ApplyRealStretch
+            )
+
+    end
+
+    SaveSettings()
+end
+
+local function SetStretchValue(value)
+
+    local number = tonumber(value)
+
+    if not number then
+        return false
+    end
+
+    number = math.clamp(
+        number,
+        CONFIG.StretchMin,
+        CONFIG.StretchMax
+    )
+
+    StretchValue = number
+
+    SaveSettings()
+
+    return true
+end
+
+--==================================================--
+-- SKY SYSTEM
+--==================================================--
+
+local CurrentSky = nil
+local SkyLoading = false
+
+local function FindSky(root)
+
+    if not root then
+        return nil
+    end
+
+    if root:IsA("Sky") then
+        return root
+    end
+
+    local sky =
+        root:FindFirstChildWhichIsA(
+            "Sky",
+            true
+        )
+
+    return sky
+end
+
+local function CloneSkyProperties(
+    sourceSky,
+    targetSky
+)
+
+    if not sourceSky or not targetSky then
+        return false
+    end
+
+    local properties = {
+
+        "SkyboxBk",
+        "SkyboxDn",
+        "SkyboxFt",
+        "SkyboxLf",
+        "SkyboxRt",
+        "SkyboxUp",
+
+        "SunAngularSize",
+        "SunTextureId",
+
+        "MoonTextureId",
+        "MoonAngularSize",
+
+        "StarCount",
+        "CelestialBodiesShown"
+    }
+
+    for _, property in ipairs(properties) do
+
+        pcall(function()
+
+            local value =
+                sourceSky[property]
+
+            if value ~= nil then
+                targetSky[property] = value
+            end
+
+        end)
+
+    end
+
+    return true
+end
+
+local function RemoveCurrentSky()
+
+    pcall(function()
+
+        for _, object in ipairs(
+            Lighting:GetChildren()
+        ) do
+
+            if object:IsA("Sky") then
+                SafeDestroy(object)
+            end
+
+        end
+
+    end)
+
+    CurrentSky = nil
+end
+
+local function LoadSkyAsset(assetId)
+
+    local objects = {}
+
+    --==================================================--
+    -- INSERT SERVICE
+    --==================================================--
+
+    pcall(function()
+
+        local container =
+            InsertService:LoadAsset(assetId)
+
+        if container then
+            table.insert(
+                objects,
+                container
+            )
+        end
+
+    end)
+
+    if #objects > 0 then
+        return objects
+    end
+
+    --==================================================--
+    -- GET OBJECTS
+    --==================================================--
+
+    pcall(function()
+
+        if typeof(game.GetObjects) == "function" then
+
+            local result =
+                game:GetObjects(
+                    "rbxassetid://" ..
+                    tostring(assetId)
+                )
+
+            if result then
+
+                for _, object in ipairs(result) do
+
+                    table.insert(
+                        objects,
+                        object
+                    )
+
+                end
+
+            end
+
+        end
+
+    end)
+
+    return objects
+end
+
+local function ApplySky(
+    skyInfo,
+    statusCallback
+)
+
+    if SkyLoading then
+        return false
+    end
+
+    if not skyInfo or not skyInfo.Id then
+        return false
+    end
+
+    SkyLoading = true
+
+    if statusCallback then
+
+        pcall(function()
+
+            statusCallback(
+                "CARREGANDO: " ..
+                skyInfo.Name
+            )
+
+        end)
+
+    end
+
+    local temporaryObjects = {}
+
+    local success, result =
+        pcall(function()
+
+            return LoadSkyAsset(
+                skyInfo.Id
+            )
+
+        end)
+
+    if success and result then
+        temporaryObjects = result
+    end
+
+    local sourceSky = nil
+
+    for _, object in ipairs(
+        temporaryObjects
+    ) do
+
+        sourceSky = FindSky(object)
+
+        if sourceSky then
+            break
+        end
+
+    end
+
+    if sourceSky then
+
+        local newSky =
+            Instance.new("Sky")
+
+        newSky.Name =
+            "SKYLARP_CurrentSky"
+
+        local copied =
+            CloneSkyProperties(
+                sourceSky,
+                newSky
+            )
+
+        if copied then
+
+            RemoveCurrentSky()
+
+            local inserted =
+                pcall(function()
+
+                    newSky.Parent =
+                        Lighting
+
+                end)
+
+            if inserted
+                and newSky.Parent == Lighting then
+
+                CurrentSky = newSky
+
+                if statusCallback then
+
+                    pcall(function()
+
+                        statusCallback(
+                            "ATIVO: " ..
+                            skyInfo.Name
+                        )
+
+                    end)
+
+                end
+
+            else
+
+                SafeDestroy(newSky)
+
+                if statusCallback then
+
+                    pcall(function()
+
+                        statusCallback(
+                            "ERRO AO APLICAR"
+                        )
+
+                    end)
+
+                end
+
+            end
+
+        else
+
+            SafeDestroy(newSky)
+
+        end
+
+    else
+
+        if statusCallback then
+
+            pcall(function()
+
+                statusCallback(
+                    "ERRO: SKY NÃO ENCONTRADO"
+                )
+
+            end)
+
+        end
+
+    end
+
+    for _, object in ipairs(
+        temporaryObjects
+    ) do
+
+        if object and object ~= CurrentSky then
+            SafeDestroy(object)
+        end
+
+    end
+
+    SkyLoading = false
+
+    return CurrentSky ~= nil
+end
+
+--==================================================--
+-- GUI
+--==================================================--
+
+pcall(function()
+
+    local old =
+        CoreGui:FindFirstChild(
+            CONFIG.GUIName
+        )
+
+    if old then
+        old:Destroy()
+    end
+
+end)
+
+local ScreenGui
+
+pcall(function()
+
+    ScreenGui =
+        Instance.new("ScreenGui")
+
+    ScreenGui.Name =
+        CONFIG.GUIName
+
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.ZIndexBehavior =
+        Enum.ZIndexBehavior.Sibling
+
+    ScreenGui.DisplayOrder = 999999
+
+    ScreenGui.Parent = CoreGui
+
+end)
+
+if not ScreenGui then
+
+    local PlayerGui =
+        LocalPlayer:WaitForChild(
+            "PlayerGui"
+        )
+
+    ScreenGui =
+        Instance.new("ScreenGui")
+
+    ScreenGui.Name =
+        CONFIG.GUIName
+
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.IgnoreGuiInset = true
+
+    ScreenGui.ZIndexBehavior =
+        Enum.ZIndexBehavior.Sibling
+
+    ScreenGui.DisplayOrder = 999999
+
+    ScreenGui.Parent = PlayerGui
+
+end
+
+--==================================================--
+-- UI HELPERS
+--==================================================--
+
+local function Create(
+    className,
+    properties,
+    parent
+)
+
+    local object =
+        Instance.new(className)
+
+    for property, value in pairs(
+        properties or {}
+    ) do
+
+        pcall(function()
+            object[property] = value
+        end)
+
+    end
+
+    if parent then
+        object.Parent = parent
+    end
+
+    return object
+end
+
+local function AddCorner(
+    object,
+    radius
+)
+
+    return Create(
+        "UICorner",
+        {
+            CornerRadius =
+                UDim.new(
+                    0,
+                    radius or 8
+                )
+        },
+        object
+    )
+end
+
+local function AddStroke(
+    object,
+    transparency
+)
+
+    return Create(
+        "UIStroke",
+        {
+            Thickness = 1,
+            Transparency =
+                transparency or 0.35
+        },
+        object
+    )
+end
+
+local function MakeButton(
+    parent,
+    text,
+    size,
+    position
+)
+
+    local button =
+        Create(
+            "TextButton",
+            {
+                Size = size,
+                Position = position,
+
+                BackgroundColor3 =
+                    Color3.fromRGB(
+                        38,
+                        38,
+                        44
+                    ),
+
+                BorderSizePixel = 0,
+
+                Text = text,
+
+                TextColor3 =
+                    Color3.fromRGB(
+                        235,
+                        235,
+                        240
+                    ),
+
+                TextSize = 13,
+
+                Font =
+                    Enum.Font.GothamMedium,
+
+                AutoButtonColor = true,
+                Active = true
+            },
+            parent
+        )
+
+    AddCorner(button, 8)
+    AddStroke(button, 0.55)
+
+    return button
+end
+
+--==================================================--
+-- MAIN
+--==================================================--
+
+local Main =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.fromOffset(
+                    280,
+                    370
+                ),
+
+            Position =
+                UDim2.new(
+                    0,
+                    18,
+                    0.5,
+                    -185
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    20,
+                    20,
+                    24
+                ),
+
+            BorderSizePixel = 0,
+            Active = true
+        },
+        ScreenGui
+    )
+
+AddCorner(Main, 14)
+AddStroke(Main, 0.3)
+
+local Header =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    0,
+                    0,
+                    70
+                ),
+
+            BackgroundTransparency = 1,
+            Active = true
+        },
+        Main
+    )
+
+local Title =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    32
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    9
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "SKYLARP",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 21,
+            Font = Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        Header
+    )
+
+local Subtitle =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    22
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    40
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text =
+                "PERFORMANCE • STRETCH • SKY",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    150,
+                    150,
+                    160
+                ),
+
+            TextSize = 9,
+            Font = Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        Header
+    )
+
+local MainContent =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -24,
+                    1,
+                    -82
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    12,
+                    74
+                ),
+
+            BackgroundTransparency = 1
+        },
+        Main
+    )
+
+Create(
+    "UIListLayout",
+    {
+        Padding =
+            UDim.new(
+                0,
+                8
+            ),
+
+        HorizontalAlignment =
+            Enum.HorizontalAlignment.Center,
+
+        SortOrder =
+            Enum.SortOrder.LayoutOrder
+    },
+    MainContent
+)
+
+--==================================================--
+-- PANELS
+--==================================================--
+
+local BoostPanel =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.fromOffset(
+                    290,
+                    430
+                ),
+
+            Position =
+                UDim2.new(
+                    0,
+                    18,
+                    0.5,
+                    -215
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    20,
+                    20,
+                    24
+                ),
+
+            BorderSizePixel = 0,
+            Visible = false,
+            Active = true
+        },
+        ScreenGui
+    )
+
+AddCorner(BoostPanel, 14)
+AddStroke(BoostPanel, 0.3)
+
+local StretchPanel =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.fromOffset(
+                    290,
+                    270
+                ),
+
+            Position =
+                UDim2.new(
+                    0,
+                    18,
+                    0.5,
+                    -135
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    20,
+                    20,
+                    24
+                ),
+
+            BorderSizePixel = 0,
+            Visible = false,
+            Active = true
+        },
+        ScreenGui
+    )
+
+AddCorner(StretchPanel, 14)
+AddStroke(StretchPanel, 0.3)
+
+local SkyPanel =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.fromOffset(
+                    310,
+                    440
+                ),
+
+            Position =
+                UDim2.new(
+                    0,
+                    18,
+                    0.5,
+                    -220
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    20,
+                    20,
+                    24
+                ),
+
+            BorderSizePixel = 0,
+            Visible = false,
+            Active = true
+        },
+        ScreenGui
+    )
+
+AddCorner(SkyPanel, 14)
+AddStroke(SkyPanel, 0.3)
+
+--==================================================--
+-- BOOST
+--==================================================--
+
+local BoostHeader =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -20,
+                    0,
+                    40
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    8
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "FPS BOOST",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 17,
+            Font = Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        BoostPanel
+    )
+
+local BoostBack =
+    MakeButton(
+        BoostPanel,
+        "‹ VOLTAR",
+        UDim2.fromOffset(
+            75,
+            27
+        ),
+        UDim2.new(
+            1,
+            -85,
+            0,
+            10
+        )
+    )
+
+local BoostList =
+    Create(
+        "ScrollingFrame",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -16,
+                    1,
+                    -60
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    8,
+                    52
+                ),
+
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+
+            ScrollBarThickness = 3,
+
+            CanvasSize =
+                UDim2.new(
+                    0,
+                    0,
+                    0,
+                    0
+                ),
+
+            AutomaticCanvasSize =
+                Enum.AutomaticSize.Y
+        },
+        BoostPanel
+    )
+
+Create(
+    "UIListLayout",
+    {
+        Padding =
+            UDim.new(
+                0,
+                5
+            ),
+
+        HorizontalAlignment =
+            Enum.HorizontalAlignment.Center,
+
+        SortOrder =
+            Enum.SortOrder.LayoutOrder
+    },
+    BoostList
+)
+
+local function SetPerformanceOption(
+    option,
+    enabled
+)
+
+    if CONFIG.Performance[option]
+        == nil then
+
+        return
+
+    end
+
+    CONFIG.Performance[option] =
+        enabled
+
+    if enabled then
+
+        task.spawn(function()
+
+            pcall(
+                ScanWorkspaceOnce
+            )
+
+        end)
+
+    end
+
+    SaveSettings()
+end
+
+local function CreateToggle(
+    parent,
+    text,
+    option,
+    layoutOrder
+)
+
+    local row =
+        Create(
+            "TextButton",
+            {
+                Size =
+                    UDim2.new(
+                        1,
+                        -20,
+                        0,
+                        31
+                    ),
+
+                BackgroundColor3 =
+                    Color3.fromRGB(
+                        31,
+                        31,
+                        37
+                    ),
+
+                BorderSizePixel = 0,
+
+                Text = "",
+
+                LayoutOrder =
+                    layoutOrder,
+
+                Active = true
+            },
+            parent
+        )
+
+    AddCorner(row, 7)
+
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -70,
+                    1,
+                    0
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    12,
+                    0
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = text,
+
+            TextColor3 =
+                Color3.fromRGB(
+                    225,
+                    225,
+                    230
+                ),
+
+            TextSize = 11,
+            Font = Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        row
+    )
+
+    local state =
+        Create(
+            "TextLabel",
+            {
+                Size =
+                    UDim2.fromOffset(
+                        48,
+                        23
+                    ),
+
+                Position =
+                    UDim2.new(
+                        1,
+                        -56,
+                        0.5,
+                        -11
+                    ),
+
+                TextSize = 9,
+                Font = Enum.Font.GothamBold
+            },
+            row
+        )
+
+    AddCorner(state, 6)
+
+    local function Refresh()
+
+        local enabled =
+            CONFIG.Performance[option]
+
+        if enabled then
+
+            state.Text = "ON"
+
+            state.BackgroundColor3 =
+                Color3.fromRGB(
+                    65,
+                    120,
+                    80
+                )
+
+            state.TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                )
+
+        else
+
+            state.Text = "OFF"
+
+            state.BackgroundColor3 =
+                Color3.fromRGB(
+                    60,
+                    60,
+                    68
+                )
+
+            state.TextColor3 =
+                Color3.fromRGB(
+                    185,
+                    185,
+                    190
+                )
+
+        end
+
+    end
+
+    row.Activated:Connect(function()
+
+        SetPerformanceOption(
+            option,
+            not CONFIG.Performance[option]
+        )
+
+        Refresh()
+
+    end)
+
+    Refresh()
+
+    return row
+end
+
+local Options = {
+
+    {
+        "No Camera Effects",
+        "NoCameraEffects"
+    },
+
+    {
+        "No Clothes",
+        "NoClothes"
+    },
+
+    {
+        "Low Water Graphics",
+        "LowWaterGraphics"
+    },
+
+    {
+        "No Shadows",
+        "NoShadows"
+    },
+
+    {
+        "Low Rendering",
+        "LowRendering"
+    },
+
+    {
+        "Low Quality Parts",
+        "LowQualityParts"
+    },
+
+    {
+        "Low Quality Models",
+        "LowQualityModels"
+    },
+
+    {
+        "Reset Materials",
+        "ResetMaterials"
+    },
+
+    {
+        "Remove Particles",
+        "RemoveParticles"
+    },
+
+    {
+        "Remove Lights",
+        "RemoveLights"
+    }
+}
+
+for index, option in ipairs(Options) do
+
+    CreateToggle(
+        BoostList,
+        option[1],
+        option[2],
+        index
+    )
+
+end
+
+--==================================================--
+-- STRETCH PANEL
+--==================================================--
+
+local StretchTitle =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -20,
+                    0,
+                    38
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    10
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "STRETCHER",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 17,
+            Font = Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        StretchPanel
+    )
+
+local StretchBack =
+    MakeButton(
+        StretchPanel,
+        "‹ VOLTAR",
+        UDim2.fromOffset(
+            75,
+            27
+        ),
+        UDim2.new(
+            1,
+            -85,
+            0,
+            12
+        )
+    )
+
+local StretchToggle =
+    MakeButton(
+        StretchPanel,
+
+        StretchEnabled
+            and "STRETCH SCREEN: ON"
+            or "STRETCH SCREEN: OFF",
+
+        UDim2.new(
+            1,
+            -30,
+            0,
+            42
+        ),
+
+        UDim2.fromOffset(
+            15,
+            60
+        )
+    )
+
+local StretchLabel =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    25
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    112
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "INTENSIDADE",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    170,
+                    170,
+                    180
+                ),
+
+            TextSize = 10,
+            Font = Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        StretchPanel
+    )
+
+local StretchBox =
+    Create(
+        "TextBox",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    40
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    138
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    32,
+                    32,
+                    38
+                ),
+
+            BorderSizePixel = 0,
+
+            Text =
+                string.format(
+                    "%.2f",
+                    StretchValue
+                ),
+
+            PlaceholderText = "0.75",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    245,
+                    245,
+                    250
+                ),
+
+            TextSize = 14,
+            Font = Enum.Font.GothamMedium,
+
+            ClearTextOnFocus = false
+        },
+        StretchPanel
+    )
+
+AddCorner(StretchBox, 8)
+AddStroke(StretchBox, 0.55)
+
+local StretchInfo =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    40
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    183
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text =
+                "0.30 = menor\n1.00 = normal\n2.00 = máximo",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    125,
+                    125,
+                    135
+                ),
+
+            TextSize = 9,
+            Font = Enum.Font.Gotham,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        StretchPanel
+    )
+
+StretchToggle.Activated:Connect(function()
+
+    SetStretchEnabled(
+        not StretchEnabled
+    )
+
+    StretchToggle.Text =
+        StretchEnabled
+        and "STRETCH SCREEN: ON"
+        or "STRETCH SCREEN: OFF"
+
+end)
+
+StretchBox.FocusLost:Connect(function()
+
+    if SetStretchValue(
+        StretchBox.Text
+    ) then
+
+        StretchBox.Text =
+            string.format(
+                "%.2f",
+                StretchValue
+            )
+
+    else
+
+        StretchBox.Text =
+            string.format(
+                "%.2f",
+                StretchValue
+            )
+
+    end
+
+end)
+
+--==================================================--
+-- SKY PANEL
+--==================================================--
+
+local SkyTitle =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -20,
+                    0,
+                    38
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    8
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "SKY SELECTOR",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 17,
+            Font = Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        SkyPanel
+    )
+
+local SkyBack =
+    MakeButton(
+        SkyPanel,
+        "‹ VOLTAR",
+        UDim2.fromOffset(
+            75,
+            27
+        ),
+        UDim2.new(
+            1,
+            -85,
+            0,
+            10
+        )
+    )
+
+local SkyStatus =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -20,
+                    0,
+                    28
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    45
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "Selecione um céu",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    150,
+                    150,
+                    160
+                ),
+
+            TextSize = 10,
+            Font = Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        SkyPanel
+    )
+
+local SkyListFrame =
+    Create(
+        "ScrollingFrame",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -16,
+                    1,
+                    -82
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    8,
+                    75
+                ),
+
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+
+            ScrollBarThickness = 3,
+
+            CanvasSize =
+                UDim2.new(
+                    0,
+                    0,
+                    0,
+                    0
+                ),
+
+            AutomaticCanvasSize =
+                Enum.AutomaticSize.Y
+        },
+        SkyPanel
+    )
+
+Create(
+    "UIListLayout",
+    {
+        Padding =
+            UDim.new(
+                0,
+                7
+            ),
+
+        HorizontalAlignment =
+            Enum.HorizontalAlignment.Center,
+
+        SortOrder =
+            Enum.SortOrder.LayoutOrder
+    },
+    SkyListFrame
+)
+
+local function CreateSkyCard(
+    skyInfo,
+    index
+)
+
+    local card =
+        Create(
+            "TextButton",
+            {
+                Size =
+                    UDim2.new(
+                        1,
+                        -6,
+                        0,
+                        62
+                    ),
+
+                BackgroundColor3 =
+                    Color3.fromRGB(
+                        30,
+                        30,
+                        36
+                    ),
+
+                BorderSizePixel = 0,
+
+                Text = "",
+
+                LayoutOrder = index,
+
+                Active = true
+            },
+            SkyListFrame
+        )
+
+    AddCorner(card, 9)
+    AddStroke(card, 0.65)
+
+    Create(
+        "ImageLabel",
+        {
+            Size =
+                UDim2.fromOffset(
+                    82,
+                    50
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    6,
+                    6
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    45,
+                    45,
+                    55
+                ),
+
+            BorderSizePixel = 0,
+
+            Image =
+                "rbxthumb://type=Asset&id=" ..
+                tostring(skyInfo.Id) ..
+                "&w=420&h=420",
+
+            ScaleType =
+                Enum.ScaleType.Crop
+        },
+        card
+    )
+
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -105,
+                    0,
+                    25
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    98,
+                    9
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = skyInfo.Name,
+
+            TextColor3 =
+                Color3.fromRGB(
+                    235,
+                    235,
+                    240
+                ),
+
+            TextSize = 11,
+            Font = Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left,
+
+            TextTruncate =
+                Enum.TextTruncate.AtEnd
+        },
+        card
+    )
+
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -105,
+                    0,
+                    20
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    98,
+                    34
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text =
+                "ID: " ..
+                tostring(skyInfo.Id),
+
+            TextColor3 =
+                Color3.fromRGB(
+                    125,
+                    125,
+                    135
+                ),
+
+            TextSize = 9,
+            Font = Enum.Font.Gotham,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        card
+    )
+
+    card.Activated:Connect(function()
+
+        if SkyLoading then
+            return
+        end
+
+        SkyStatus.Text =
+            "CARREGANDO: " ..
+            skyInfo.Name
+
+        task.spawn(function()
+
+            ApplySky(
+                skyInfo,
+                function(message)
+
+                    SkyStatus.Text =
+                        message
+
+                end
+            )
+
+        end)
+
+    end)
+
+end
+
+for index, skyInfo in ipairs(
+    SKY_LIST
+) do
+
+    CreateSkyCard(
+        skyInfo,
+        index
+    )
+
+end
+
+--==================================================--
+-- HUD
+--==================================================--
+
+local HUD =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.fromOffset(
+                    145,
+                    63
+                ),
+
+            Position =
+                UDim2.new(
+                    0,
+                    16,
+                    0,
+                    80
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    18,
+                    18,
+                    22
+                ),
+
+            BackgroundTransparency = 0.08,
+
+            BorderSizePixel = 0,
+
+            Active = true
+        },
+        ScreenGui
+    )
+
+AddCorner(HUD, 11)
+AddStroke(HUD, 0.45)
+
+Create(
+    "TextLabel",
+    {
+        Size =
+            UDim2.new(
+                1,
+                -18,
+                0,
+                22
+            ),
+
+        Position =
+            UDim2.fromOffset(
+                9,
+                5
+            ),
+
+        BackgroundTransparency = 1,
+
+        Text = "SKYLARP",
+
+        TextColor3 =
+            Color3.fromRGB(
+                255,
+                255,
+                255
+            ),
+
+        TextSize = 12,
+        Font = Enum.Font.GothamBold,
+
+        TextXAlignment =
+            Enum.TextXAlignment.Left
+    },
+    HUD
+)
+
+local FPSLabel =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    0.5,
+                    -8,
+                    0,
+                    24
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    9,
+                    30
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "FPS: --",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    220,
+                    220,
+                    225
+                ),
+
+            TextSize = 11,
+            Font = Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        HUD
+    )
+
+local MSLabel =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    0.5,
+                    -8,
+                    0,
+                    24
+                ),
+
+            Position =
+                UDim2.new(
+                    0.5,
+                    0,
+                    0,
+                    30
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "MS: --",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    220,
+                    220,
+                    225
+                ),
+
+            TextSize = 11,
+            Font = Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        HUD
+    )
+
+--==================================================--
+-- OPEN BUTTON
+--==================================================--
+
+local OpenButton =
+    Create(
+        "TextButton",
+        {
+            Size =
+                UDim2.fromOffset(
+                    43,
+                    43
+                ),
+
+            Position =
+                UDim2.new(
+                    0,
+                    15,
+                    0,
+                    145
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    25,
+                    25,
+                    30
+                ),
+
+            BorderSizePixel = 0,
+
+            Text = "S",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 17,
+            Font = Enum.Font.GothamBold,
+
+            Active = true,
+            Visible = false
+        },
+        ScreenGui
+    )
+
+AddCorner(OpenButton, 22)
+AddStroke(OpenButton, 0.3)
+
+--==================================================--
+-- NAVIGATION
+--==================================================--
+
+local function HideAllPanels()
+
+    Main.Visible = false
+    BoostPanel.Visible = false
+    StretchPanel.Visible = false
+    SkyPanel.Visible = false
+
+end
+
+local function ShowMain()
+
+    HideAllPanels()
+
+    Main.Visible = true
+
+end
+
+local function ShowBoost()
+
+    HideAllPanels()
+
+    BoostPanel.Visible = true
+
+end
+
+local function ShowStretch()
+
+    HideAllPanels()
+
+    StretchPanel.Visible = true
+
+end
+
+local function ShowSky()
+
+    HideAllPanels()
+
+    SkyPanel.Visible = true
+
+end
+
+local function CloseMenu()
+
+    HideAllPanels()
+
+    HUD.Visible = true
+    OpenButton.Visible = true
+
+end
+
+local function OpenMenu()
+
+    HideAllPanels()
+
+    Main.Visible = true
+
+    HUD.Visible = false
+    OpenButton.Visible = false
+
+end
+
+local FPSBoostButton =
+    MakeButton(
+        MainContent,
+        "FPS BOOST",
+        UDim2.new(
+            1,
+            0,
+            0,
+            50
+        ),
+        UDim2.new()
+    )
+
+local StretcherButton =
+    MakeButton(
+        MainContent,
+        "STRETCHER",
+        UDim2.new(
+            1,
+            0,
+            0,
+            50
+        ),
+        UDim2.new()
+    )
+
+local SkySelectorButton =
+    MakeButton(
+        MainContent,
+        "SKY SELECTOR",
+        UDim2.new(
+            1,
+            0,
+            0,
+            50
+        ),
+        UDim2.new()
+    )
+
+local CloseButton =
+    MakeButton(
+        MainContent,
+        "FECHAR MENU",
+        UDim2.new(
+            1,
+            0,
+            0,
+            50
+        ),
+        UDim2.new()
+    )
+
+FPSBoostButton.Activated:Connect(
+    ShowBoost
+)
+
+StretcherButton.Activated:Connect(
+    ShowStretch
+)
+
+SkySelectorButton.Activated:Connect(
+    ShowSky
+)
+
+CloseButton.Activated:Connect(
+    CloseMenu
+)
+
+BoostBack.Activated:Connect(
+    ShowMain
+)
+
+StretchBack.Activated:Connect(
+    ShowMain
+)
+
+SkyBack.Activated:Connect(
+    ShowMain
+)
+
+OpenButton.Activated:Connect(
+    OpenMenu
+)
+
+--==================================================--
+-- DRAG MOBILE
+--==================================================--
+
+local function MakeDraggable(
+    object,
+    handle
+)
+
+    local dragging = false
+    local dragStart
+    local startPosition
+
+    handle.InputBegan:Connect(
+        function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.Touch
+                or input.UserInputType ==
+                Enum.UserInputType.MouseButton1 then
+
+                dragging = true
+
+                dragStart =
+                    input.Position
+
+                startPosition =
+                    object.Position
+
+            end
+
+        end
+    )
+
+    UserInputService.InputChanged:Connect(
+        function(input)
+
+            if not dragging then
+                return
+            end
+
+            if input.UserInputType ==
+                Enum.UserInputType.Touch
+                or input.UserInputType ==
+                Enum.UserInputType.MouseMovement then
+
+                local delta =
+                    input.Position -
+                    dragStart
+
+                object.Position =
+                    UDim2.fromOffset(
+                        startPosition.X.Offset
+                            + delta.X,
+
+                        startPosition.Y.Offset
+                            + delta.Y
+                    )
+
+            end
+
+        end
+    )
+
+    UserInputService.InputEnded:Connect(
+        function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.Touch
+                or input.UserInputType ==
+                Enum.UserInputType.MouseButton1 then
+
+                dragging = false
+
+            end
+
+        end
+    )
+end
+
+MakeDraggable(
+    Main,
+    Header
+)
+
+MakeDraggable(
+    BoostPanel,
+    BoostHeader
+)
+
+MakeDraggable(
+    StretchPanel,
+    StretchTitle
+)
+
+MakeDraggable(
+    SkyPanel,
+    SkyTitle
+)
+
+MakeDraggable(
+    HUD,
+    HUD
+)
+
+--==================================================--
+-- FPS
+--==================================================--
+
+local FPSFrames = 0
+local FPSAccumulator = 0
+
+RunService.RenderStepped:Connect(
+    function(deltaTime)
+
+        if not deltaTime
+            or deltaTime <= 0 then
+            return
+        end
+
+        FPSFrames += 1
+        FPSAccumulator += deltaTime
+
+        if FPSAccumulator >= 0.5 then
+
+            local fps =
+                FPSFrames /
+                FPSAccumulator
+
+            if fps == fps and fps > 0 then
+
+                FPSLabel.Text =
+                    "FPS: " ..
+                    tostring(
+                        math.floor(
+                            fps + 0.5
+                        )
+                    )
+
+            end
+
+            FPSFrames = 0
+            FPSAccumulator = 0
+
+        end
+
+    end
+)
+
+--==================================================--
+-- PING
+--==================================================--
+
+local function GetPing()
+
+    local ping
+
+    pcall(function()
+
+        local networkStats =
+            Stats:FindFirstChild(
+                "Network"
+            )
+
+        if networkStats then
+
+            local serverStats =
+                networkStats:FindFirstChild(
+                    "ServerStatsItem"
+                )
+
+            if serverStats then
+
+                local dataPing =
+                    serverStats:FindFirstChild(
+                        "Data Ping"
+                    )
+
+                if dataPing then
+
+                    local valueString =
+                        dataPing:GetValueString()
+
+                    local number =
+                        tonumber(
+                            string.match(
+                                valueString,
+                                "%d+"
+                            )
+                        )
+
+                    if number then
+                        ping =
+                            math.floor(
+                                number + 0.5
+                            )
+                    end
+
+                end
+
+            end
+
+        end
+
+    end)
+
+    return ping
+end
+
+task.spawn(function()
+
+    while ScreenGui
+        and ScreenGui.Parent do
+
+        local ping =
+            GetPing()
+
+        if ping then
+
+            MSLabel.Text =
+                "MS: " ..
+                tostring(ping)
+
+        else
+
+            MSLabel.Text =
+                "MS: --"
+
+        end
+
+        task.wait(1)
+
+    end
+
+end)
+
+--==================================================--
+-- CHARACTER
+--==================================================--
+
+local function SetupCharacter(
+    character
+)
+
+    DisconnectList(
+        CharacterConnections
+    )
+
+    if not character then
+        return
+    end
+
+    task.defer(function()
+
+        pcall(function()
+
+            for _, object in ipairs(
+                character:GetDescendants()
+            ) do
+
+                ApplyPerformanceObject(
+                    object
+                )
+
+            end
+
+        end)
+
+    end)
+
+    CharacterConnections.DescendantAdded =
+        character.DescendantAdded:Connect(
+            function(object)
+
+                task.defer(function()
+
+                    ApplyPerformanceObject(
+                        object
+                    )
+
+                end)
+
+            end
+        )
+end
+
+if LocalPlayer.Character then
+
+    SetupCharacter(
+        LocalPlayer.Character
+    )
+
+end
+
+LocalPlayer.CharacterAdded:Connect(
+    function(character)
+
+        task.wait(0.2)
+
+        SetupCharacter(
+            character
+        )
+
+    end
+)
+
+--==================================================--
+-- AUTOMATIC PERFORMANCE
+--==================================================--
+
+pcall(
+    ScanWorkspaceOnce
+)
+
+pcall(
+    SetupPerformanceConnections
+)
+
+--==================================================--
+-- INITIAL GUI
+--==================================================--
+
+HideAllPanels()
+
+Main.Visible = true
+HUD.Visible = false
+OpenButton.Visible = false
+
+--==================================================--
+-- START STRETCH
+--==================================================--
+
+if StretchEnabled then
+
+    SetStretchEnabled(true)
+
+end
+
+--==================================================--
+-- AUTO SAVE LOOP
+--==================================================--
+
+task.spawn(function()
+
+    while ScreenGui
+        and ScreenGui.Parent do
+
+        if CONFIG.AutoSave then
+            SaveSettings()
+        end
+
+        task.wait(5)
+
+    end
+
+end)
+
+--==================================================--
+-- DONE
+--==================================================--
+
+pcall(function()
+
+    SaveSettings()
+
+end)
