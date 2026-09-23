@@ -47,6 +47,7 @@ local Workspace = game:GetService("Workspace")
 local InsertService = game:GetService("InsertService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -60,7 +61,6 @@ end
 
 local SKY_LIST = {
 
-    -- NOVOS CÉUS
     {
         Name = "Minecraft Sky",
         Id = 10594760952
@@ -86,7 +86,6 @@ local SKY_LIST = {
         Id = 339406852
     },
 
-    -- CÉUS ANTERIORES
     {
         Name = "Firestarter",
         Id = 102568900092902
@@ -153,6 +152,7 @@ local SKY_LIST = {
 --==================================================--
 
 local function SafeSet(object, property, value)
+
     if not object then
         return false
     end
@@ -163,6 +163,7 @@ local function SafeSet(object, property, value)
 end
 
 local function SafeGet(object, property)
+
     if not object then
         return nil
     end
@@ -177,6 +178,7 @@ local function SafeGet(object, property)
 end
 
 local function SafeDestroy(object)
+
     if not object then
         return
     end
@@ -187,56 +189,47 @@ local function SafeDestroy(object)
 end
 
 --==================================================--
--- AUTO SAVE
+-- SAVE VARIABLES
 --==================================================--
 
 local SavedSettings = {}
 
+local StretchEnabled = false
+local StretchValue = CONFIG.StretchDefault
+
+local SkySelected = nil
+
+local SavedHUDPosition = {
+    X = 16,
+    Y = 80
+}
+
+--==================================================--
+-- FILE SYSTEM
+--==================================================--
+
 local function CanUseFileSystem()
+
     return typeof(readfile) == "function"
         and typeof(writefile) == "function"
 end
 
-local function SaveSettings()
-    if not CONFIG.AutoSave then
-        return
-    end
-
-    if not CanUseFileSystem() then
-        return
-    end
-
-    local data = {
-        StretchValue = StretchValue or CONFIG.StretchDefault,
-        StretchEnabled = StretchEnabled or false,
-
-        Performance = {}
-    }
-
-    for name, value in pairs(CONFIG.Performance) do
-        data.Performance[name] = value
-    end
-
-    local success, encoded = pcall(function()
-        return game:GetService("HttpService"):JSONEncode(data)
-    end)
-
-    if not success or not encoded then
-        return
-    end
-
-    pcall(function()
-        writefile(CONFIG.SaveFile, encoded)
-    end)
-end
+--==================================================--
+-- LOAD SETTINGS
+--==================================================--
 
 local function LoadSettings()
+
     if not CanUseFileSystem() then
         return
     end
 
     local success, content = pcall(function()
-        return readfile(CONFIG.SaveFile)
+
+        return readfile(
+            CONFIG.SaveFile
+        )
+
     end)
 
     if not success or not content then
@@ -244,10 +237,16 @@ local function LoadSettings()
     end
 
     local ok, data = pcall(function()
-        return game:GetService("HttpService"):JSONDecode(content)
+
+        return HttpService:JSONDecode(
+            content
+        )
+
     end)
 
-    if not ok or type(data) ~= "table" then
+    if not ok
+        or type(data) ~= "table" then
+
         return
     end
 
@@ -257,14 +256,222 @@ end
 LoadSettings()
 
 --==================================================--
+-- RESTORE STRETCH
+--==================================================--
+
+if type(
+    SavedSettings.StretchValue
+) == "number" then
+
+    StretchValue =
+        math.clamp(
+            SavedSettings.StretchValue,
+            CONFIG.StretchMin,
+            CONFIG.StretchMax
+        )
+
+end
+
+if type(
+    SavedSettings.StretchEnabled
+) == "boolean" then
+
+    StretchEnabled =
+        SavedSettings.StretchEnabled
+
+end
+
+--==================================================--
+-- RESTORE SKY
+--==================================================--
+
+if type(
+    SavedSettings.SkySelected
+) == "string"
+and SavedSettings.SkySelected ~= "" then
+
+    SkySelected =
+        SavedSettings.SkySelected
+
+end
+
+--==================================================--
+-- RESTORE HUD POSITION
+--==================================================--
+
+if type(
+    SavedSettings.HUDPosition
+) == "table" then
+
+    if type(
+        SavedSettings.HUDPosition.X
+    ) == "number" then
+
+        SavedHUDPosition.X =
+            SavedSettings.HUDPosition.X
+
+    end
+
+    if type(
+        SavedSettings.HUDPosition.Y
+    ) == "number" then
+
+        SavedHUDPosition.Y =
+            SavedSettings.HUDPosition.Y
+
+    end
+
+end
+
+--==================================================--
+-- RESTORE PERFORMANCE
+--==================================================--
+
+if type(
+    SavedSettings.Performance
+) == "table" then
+
+    for option, value in pairs(
+        SavedSettings.Performance
+    ) do
+
+        if CONFIG.Performance[option] ~= nil
+            and type(value) == "boolean" then
+
+            CONFIG.Performance[option] =
+                value
+
+        end
+
+    end
+
+end
+
+--==================================================--
 -- FPS CAP
 --==================================================--
 
 pcall(function()
+
     if typeof(setfpscap) == "function" then
-        setfpscap(CONFIG.FPSCap)
+
+        setfpscap(
+            CONFIG.FPSCap
+        )
+
     end
+
 end)
+
+--==================================================--
+-- AUTO SAVE
+--==================================================--
+
+local HUD = nil
+
+local function SaveSettings()
+
+    if not CONFIG.AutoSave then
+        return
+    end
+
+    if not CanUseFileSystem() then
+        return
+    end
+
+    local hudX =
+        SavedHUDPosition.X
+
+    local hudY =
+        SavedHUDPosition.Y
+
+    if HUD then
+
+        pcall(function()
+
+            hudX =
+                HUD.Position.X.Offset
+
+            hudY =
+                HUD.Position.Y.Offset
+
+        end)
+
+    end
+
+    local data = {
+
+        --================================================--
+        -- STRETCH
+        --================================================--
+
+        StretchValue =
+            StretchValue
+            or CONFIG.StretchDefault,
+
+        StretchEnabled =
+            StretchEnabled
+            or false,
+
+        --================================================--
+        -- SKY
+        --================================================--
+
+        SkySelected =
+            SkySelected
+            or "",
+
+        --================================================--
+        -- HUD
+        --================================================--
+
+        HUDPosition = {
+
+            X = hudX,
+
+            Y = hudY
+        },
+
+        --================================================--
+        -- PERFORMANCE
+        --================================================--
+
+        Performance = {}
+    }
+
+    for name, value in pairs(
+        CONFIG.Performance
+    ) do
+
+        data.Performance[name] =
+            value
+
+    end
+
+    local success, encoded =
+        pcall(function()
+
+            return HttpService:JSONEncode(
+                data
+            )
+
+        end)
+
+    if not success
+        or not encoded then
+
+        return
+    end
+
+    pcall(function()
+
+        writefile(
+            CONFIG.SaveFile,
+            encoded
+        )
+
+    end)
+end
 
 --==================================================--
 -- PERFORMANCE
@@ -273,50 +480,79 @@ end)
 local PerformanceConnections = {}
 local CharacterConnections = {}
 
-local function DisconnectConnection(connection)
+local function DisconnectConnection(
+    connection
+)
+
     if connection then
+
         pcall(function()
+
             connection:Disconnect()
+
         end)
+
     end
 end
 
 local function DisconnectList(list)
+
     for key, connection in pairs(list) do
-        DisconnectConnection(connection)
+
+        DisconnectConnection(
+            connection
+        )
+
         list[key] = nil
+
     end
 end
 
 local function IsCharacterPart(object)
+
     if not object then
         return false
     end
 
-    local model = object:FindFirstAncestorOfClass("Model")
+    local model =
+        object:FindFirstAncestorOfClass(
+            "Model"
+        )
 
     if not model then
         return false
     end
 
-    return Players:GetPlayerFromCharacter(model) ~= nil
+    return Players:GetPlayerFromCharacter(
+        model
+    ) ~= nil
 end
 
 local function ApplyNoCameraEffects()
+
     if not CONFIG.Performance.NoCameraEffects then
         return
     end
 
     pcall(function()
-        for _, object in ipairs(Lighting:GetChildren()) do
+
+        for _, object in ipairs(
+            Lighting:GetChildren()
+        ) do
+
             if object:IsA("PostEffect") then
+
                 SafeDestroy(object)
+
             end
+
         end
+
     end)
 end
 
 local function ApplyNoClothes(object)
+
     if not CONFIG.Performance.NoClothes then
         return
     end
@@ -326,22 +562,29 @@ local function ApplyNoClothes(object)
     end
 
     pcall(function()
+
         if object:IsA("Shirt")
             or object:IsA("Pants")
             or object:IsA("ShirtGraphic")
             or object:IsA("CharacterMesh") then
 
             SafeDestroy(object)
+
             return
         end
 
-        if object:IsA("Accessory") and IsCharacterPart(object) then
+        if object:IsA("Accessory")
+            and IsCharacterPart(object) then
+
             SafeDestroy(object)
+
         end
+
     end)
 end
 
 local function ApplyLowWater(object)
+
     if not CONFIG.Performance.LowWaterGraphics then
         return
     end
@@ -351,16 +594,40 @@ local function ApplyLowWater(object)
     end
 
     pcall(function()
+
         if object:IsA("Terrain") then
-            SafeSet(object, "WaterWaveSize", 0)
-            SafeSet(object, "WaterWaveSpeed", 0)
-            SafeSet(object, "WaterReflectance", 0)
-            SafeSet(object, "WaterTransparency", 1)
+
+            SafeSet(
+                object,
+                "WaterWaveSize",
+                0
+            )
+
+            SafeSet(
+                object,
+                "WaterWaveSpeed",
+                0
+            )
+
+            SafeSet(
+                object,
+                "WaterReflectance",
+                0
+            )
+
+            SafeSet(
+                object,
+                "WaterTransparency",
+                1
+            )
+
         end
+
     end)
 end
 
 local function ApplyNoShadows(object)
+
     if not CONFIG.Performance.NoShadows then
         return
     end
@@ -370,28 +637,43 @@ local function ApplyNoShadows(object)
     end
 
     pcall(function()
+
         if object:IsA("BasePart") then
-            SafeSet(object, "CastShadow", false)
+
+            SafeSet(
+                object,
+                "CastShadow",
+                false
+            )
+
         end
+
     end)
 end
 
 local function ApplyLowRendering()
+
     if not CONFIG.Performance.LowRendering then
         return
     end
 
     pcall(function()
+
         settings().Rendering.QualityLevel =
             Enum.QualityLevel.Level01
+
     end)
 
     pcall(function()
-        Lighting.GlobalShadows = false
+
+        Lighting.GlobalShadows =
+            false
+
     end)
 end
 
 local function ApplyLowQualityParts(object)
+
     if not CONFIG.Performance.LowQualityParts then
         return
     end
@@ -401,6 +683,7 @@ local function ApplyLowQualityParts(object)
     end
 
     pcall(function()
+
         if object:IsA("BasePart") then
 
             SafeSet(
@@ -416,17 +699,22 @@ local function ApplyLowQualityParts(object)
             )
 
             if object:IsA("MeshPart") then
+
                 SafeSet(
                     object,
                     "RenderFidelity",
                     Enum.RenderFidelity.Performance
                 )
+
             end
+
         end
+
     end)
 end
 
 local function ApplyLowQualityModels(object)
+
     if not CONFIG.Performance.LowQualityModels then
         return
     end
@@ -436,6 +724,7 @@ local function ApplyLowQualityModels(object)
     end
 
     pcall(function()
+
         if object:IsA("MeshPart") then
 
             SafeSet(
@@ -451,11 +740,14 @@ local function ApplyLowQualityModels(object)
                 "CastShadow",
                 false
             )
+
         end
+
     end)
 end
 
 local function ApplyResetMaterials(object)
+
     if not CONFIG.Performance.ResetMaterials then
         return
     end
@@ -465,7 +757,9 @@ local function ApplyResetMaterials(object)
     end
 
     pcall(function()
+
         if object:IsA("BasePart") then
+
             SafeSet(
                 object,
                 "Material",
@@ -477,11 +771,14 @@ local function ApplyResetMaterials(object)
                 "Reflectance",
                 0
             )
+
         end
+
     end)
 end
 
 local function ApplyRemoveParticles(object)
+
     if not CONFIG.Performance.RemoveParticles then
         return
     end
@@ -502,10 +799,12 @@ local function ApplyRemoveParticles(object)
             SafeDestroy(object)
 
         end
+
     end)
 end
 
 local function ApplyRemoveLights(object)
+
     if not CONFIG.Performance.RemoveLights then
         return
     end
@@ -523,12 +822,15 @@ local function ApplyRemoveLights(object)
             SafeDestroy(object)
 
         end
+
     end)
 end
 
 local function ApplyPerformanceObject(object)
 
-    if not object or not object.Parent then
+    if not object
+        or not object.Parent then
+
         return
     end
 
@@ -549,7 +851,9 @@ local function ScanWorkspaceOnce()
             Workspace:GetDescendants()
         ) do
 
-            ApplyPerformanceObject(object)
+            ApplyPerformanceObject(
+                object
+            )
 
         end
 
@@ -559,7 +863,9 @@ local function ScanWorkspaceOnce()
     ApplyLowRendering()
 
     ApplyLowWater(
-        Workspace:FindFirstChildOfClass("Terrain")
+        Workspace:FindFirstChildOfClass(
+            "Terrain"
+        )
     )
 end
 
@@ -570,80 +876,61 @@ local function SetupPerformanceConnections()
     )
 
     PerformanceConnections.DescendantAdded =
-        Workspace.DescendantAdded:Connect(function(object)
+        Workspace.DescendantAdded:Connect(
+            function(object)
 
-            task.defer(function()
+                task.defer(function()
 
-                if object and object.Parent then
-                    ApplyPerformanceObject(object)
-                end
+                    if object
+                        and object.Parent then
 
-            end)
+                        ApplyPerformanceObject(
+                            object
+                        )
 
-        end)
+                    end
+
+                end)
+
+            end
+        )
 
     PerformanceConnections.LightingAdded =
-        Lighting.ChildAdded:Connect(function(object)
+        Lighting.ChildAdded:Connect(
+            function(object)
 
-            task.defer(function()
+                task.defer(function()
 
-                ApplyNoCameraEffects()
+                    ApplyNoCameraEffects()
 
-                if object then
-                    ApplyRemoveLights(object)
-                end
+                    if object then
 
-            end)
+                        ApplyRemoveLights(
+                            object
+                        )
 
-        end)
+                    end
+
+                end)
+
+            end
+        )
 end
 
 --==================================================--
 -- STRETCHER
--- REAL SCREEN STRETCH METHOD
 --==================================================--
 
-local StretchEnabled = false
-local StretchValue = CONFIG.StretchDefault
 local StretchConnection = nil
-
-if type(SavedSettings.StretchValue) == "number" then
-
-    StretchValue = math.clamp(
-        SavedSettings.StretchValue,
-        CONFIG.StretchMin,
-        CONFIG.StretchMax
-    )
-
-end
-
-if type(SavedSettings.StretchEnabled) == "boolean" then
-    StretchEnabled = SavedSettings.StretchEnabled
-end
-
-if type(SavedSettings.Performance) == "table" then
-
-    for option, value in pairs(
-        SavedSettings.Performance
-    ) do
-
-        if CONFIG.Performance[option] ~= nil
-            and type(value) == "boolean" then
-
-            CONFIG.Performance[option] = value
-
-        end
-
-    end
-
-end
 
 local function DisconnectStretch()
 
     if StretchConnection then
 
         pcall(function()
+
             StretchConnection:Disconnect()
+
         end)
 
         StretchConnection = nil
@@ -657,17 +944,19 @@ local function ApplyRealStretch()
         return
     end
 
-    local Camera = Workspace.CurrentCamera
+    local Camera =
+        Workspace.CurrentCamera
 
     if not Camera then
         return
     end
 
-    local scale = math.clamp(
-        StretchValue,
-        CONFIG.StretchMin,
-        CONFIG.StretchMax
-    )
+    local scale =
+        math.clamp(
+            StretchValue,
+            CONFIG.StretchMin,
+            CONFIG.StretchMax
+        )
 
     pcall(function()
 
@@ -685,9 +974,12 @@ local function ApplyRealStretch()
     end)
 end
 
-local function SetStretchEnabled(enabled)
+local function SetStretchEnabled(
+    enabled
+)
 
-    StretchEnabled = enabled
+    StretchEnabled =
+        enabled == true
 
     DisconnectStretch()
 
@@ -705,19 +997,22 @@ end
 
 local function SetStretchValue(value)
 
-    local number = tonumber(value)
+    local number =
+        tonumber(value)
 
     if not number then
         return false
     end
 
-    number = math.clamp(
-        number,
-        CONFIG.StretchMin,
-        CONFIG.StretchMax
-    )
+    number =
+        math.clamp(
+            number,
+            CONFIG.StretchMin,
+            CONFIG.StretchMax
+        )
 
-    StretchValue = number
+    StretchValue =
+        number
 
     SaveSettings()
 
@@ -741,13 +1036,10 @@ local function FindSky(root)
         return root
     end
 
-    local sky =
-        root:FindFirstChildWhichIsA(
-            "Sky",
-            true
-        )
-
-    return sky
+    return root:FindFirstChildWhichIsA(
+        "Sky",
+        true
+    )
 end
 
 local function CloneSkyProperties(
@@ -755,7 +1047,9 @@ local function CloneSkyProperties(
     targetSky
 )
 
-    if not sourceSky or not targetSky then
+    if not sourceSky
+        or not targetSky then
+
         return false
     end
 
@@ -778,7 +1072,9 @@ local function CloneSkyProperties(
         "CelestialBodiesShown"
     }
 
-    for _, property in ipairs(properties) do
+    for _, property in ipairs(
+        properties
+    ) do
 
         pcall(function()
 
@@ -786,7 +1082,10 @@ local function CloneSkyProperties(
                 sourceSky[property]
 
             if value ~= nil then
-                targetSky[property] = value
+
+                targetSky[property] =
+                    value
+
             end
 
         end)
@@ -805,7 +1104,9 @@ local function RemoveCurrentSky()
         ) do
 
             if object:IsA("Sky") then
+
                 SafeDestroy(object)
+
             end
 
         end
@@ -819,20 +1120,20 @@ local function LoadSkyAsset(assetId)
 
     local objects = {}
 
-    --==================================================--
-    -- INSERT SERVICE
-    --==================================================--
-
     pcall(function()
 
         local container =
-            InsertService:LoadAsset(assetId)
+            InsertService:LoadAsset(
+                assetId
+            )
 
         if container then
+
             table.insert(
                 objects,
                 container
             )
+
         end
 
     end)
@@ -841,23 +1142,23 @@ local function LoadSkyAsset(assetId)
         return objects
     end
 
-    --==================================================--
-    -- GET OBJECTS
-    --==================================================--
-
     pcall(function()
 
-        if typeof(game.GetObjects) == "function" then
+        if typeof(
+            game.GetObjects
+        ) == "function" then
 
             local result =
                 game:GetObjects(
-                    "rbxassetid://" ..
-                    tostring(assetId)
+                    "rbxassetid://"
+                    .. tostring(assetId)
                 )
 
             if result then
 
-                for _, object in ipairs(result) do
+                for _, object in ipairs(
+                    result
+                ) do
 
                     table.insert(
                         objects,
@@ -884,7 +1185,9 @@ local function ApplySky(
         return false
     end
 
-    if not skyInfo or not skyInfo.Id then
+    if not skyInfo
+        or not skyInfo.Id then
+
         return false
     end
 
@@ -895,8 +1198,8 @@ local function ApplySky(
         pcall(function()
 
             statusCallback(
-                "CARREGANDO: " ..
-                skyInfo.Name
+                "CARREGANDO: "
+                .. skyInfo.Name
             )
 
         end)
@@ -915,7 +1218,10 @@ local function ApplySky(
         end)
 
     if success and result then
-        temporaryObjects = result
+
+        temporaryObjects =
+            result
+
     end
 
     local sourceSky = nil
@@ -924,7 +1230,8 @@ local function ApplySky(
         temporaryObjects
     ) do
 
-        sourceSky = FindSky(object)
+        sourceSky =
+            FindSky(object)
 
         if sourceSky then
             break
@@ -959,17 +1266,28 @@ local function ApplySky(
                 end)
 
             if inserted
-                and newSky.Parent == Lighting then
+                and newSky.Parent ==
+                    Lighting then
 
-                CurrentSky = newSky
+                CurrentSky =
+                    newSky
+
+                --================================================--
+                -- SALVAR SKY IMEDIATAMENTE
+                --================================================--
+
+                SkySelected =
+                    skyInfo.Name
+
+                SaveSettings()
 
                 if statusCallback then
 
                     pcall(function()
 
                         statusCallback(
-                            "ATIVO: " ..
-                            skyInfo.Name
+                            "ATIVO: "
+                            .. skyInfo.Name
                         )
 
                     end)
@@ -1020,8 +1338,11 @@ local function ApplySky(
         temporaryObjects
     ) do
 
-        if object and object ~= CurrentSky then
+        if object
+            and object ~= CurrentSky then
+
             SafeDestroy(object)
+
         end
 
     end
@@ -1058,14 +1379,20 @@ pcall(function()
     ScreenGui.Name =
         CONFIG.GUIName
 
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.ResetOnSpawn =
+        false
+
+    ScreenGui.IgnoreGuiInset =
+        true
+
     ScreenGui.ZIndexBehavior =
         Enum.ZIndexBehavior.Sibling
 
-    ScreenGui.DisplayOrder = 999999
+    ScreenGui.DisplayOrder =
+        999999
 
-    ScreenGui.Parent = CoreGui
+    ScreenGui.Parent =
+        CoreGui
 
 end)
 
@@ -1082,15 +1409,20 @@ if not ScreenGui then
     ScreenGui.Name =
         CONFIG.GUIName
 
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.ResetOnSpawn =
+        false
+
+    ScreenGui.IgnoreGuiInset =
+        true
 
     ScreenGui.ZIndexBehavior =
         Enum.ZIndexBehavior.Sibling
 
-    ScreenGui.DisplayOrder = 999999
+    ScreenGui.DisplayOrder =
+        999999
 
-    ScreenGui.Parent = PlayerGui
+    ScreenGui.Parent =
+        PlayerGui
 
 end
 
@@ -1112,7 +1444,10 @@ local function Create(
     ) do
 
         pcall(function()
-            object[property] = value
+
+            object[property] =
+                value
+
         end)
 
     end
@@ -1196,13 +1531,21 @@ local function MakeButton(
                     Enum.Font.GothamMedium,
 
                 AutoButtonColor = true,
+
                 Active = true
             },
             parent
         )
 
-    AddCorner(button, 8)
-    AddStroke(button, 0.55)
+    AddCorner(
+        button,
+        8
+    )
+
+    AddStroke(
+        button,
+        0.55
+    )
 
     return button
 end
@@ -1237,13 +1580,21 @@ local Main =
                 ),
 
             BorderSizePixel = 0,
+
             Active = true
         },
         ScreenGui
     )
 
-AddCorner(Main, 14)
-AddStroke(Main, 0.3)
+AddCorner(
+    Main,
+    14
+)
+
+AddStroke(
+    Main,
+    0.3
+)
 
 local Header =
     Create(
@@ -1258,6 +1609,7 @@ local Header =
                 ),
 
             BackgroundTransparency = 1,
+
             Active = true
         },
         Main
@@ -1293,7 +1645,9 @@ local Title =
                 ),
 
             TextSize = 21,
-            Font = Enum.Font.GothamBold,
+
+            Font =
+                Enum.Font.GothamBold,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -1332,7 +1686,9 @@ local Subtitle =
                 ),
 
             TextSize = 9,
-            Font = Enum.Font.GothamMedium,
+
+            Font =
+                Enum.Font.GothamMedium,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -1411,14 +1767,23 @@ local BoostPanel =
                 ),
 
             BorderSizePixel = 0,
+
             Visible = false,
+
             Active = true
         },
         ScreenGui
     )
 
-AddCorner(BoostPanel, 14)
-AddStroke(BoostPanel, 0.3)
+AddCorner(
+    BoostPanel,
+    14
+)
+
+AddStroke(
+    BoostPanel,
+    0.3
+)
 
 local StretchPanel =
     Create(
@@ -1446,14 +1811,23 @@ local StretchPanel =
                 ),
 
             BorderSizePixel = 0,
+
             Visible = false,
+
             Active = true
         },
         ScreenGui
     )
 
-AddCorner(StretchPanel, 14)
-AddStroke(StretchPanel, 0.3)
+AddCorner(
+    StretchPanel,
+    14
+)
+
+AddStroke(
+    StretchPanel,
+    0.3
+)
 
 local SkyPanel =
     Create(
@@ -1481,14 +1855,23 @@ local SkyPanel =
                 ),
 
             BorderSizePixel = 0,
+
             Visible = false,
+
             Active = true
         },
         ScreenGui
     )
 
-AddCorner(SkyPanel, 14)
-AddStroke(SkyPanel, 0.3)
+AddCorner(
+    SkyPanel,
+    14
+)
+
+AddStroke(
+    SkyPanel,
+    0.3
+)
 
 --==================================================--
 -- BOOST
@@ -1524,7 +1907,9 @@ local BoostHeader =
                 ),
 
             TextSize = 17,
-            Font = Enum.Font.GothamBold,
+
+            Font =
+                Enum.Font.GothamBold,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -1567,6 +1952,7 @@ local BoostList =
                 ),
 
             BackgroundTransparency = 1,
+
             BorderSizePixel = 0,
 
             ScrollBarThickness = 3,
@@ -1608,11 +1994,8 @@ local function SetPerformanceOption(
     enabled
 )
 
-    if CONFIG.Performance[option]
-        == nil then
-
+    if CONFIG.Performance[option] == nil then
         return
-
     end
 
     CONFIG.Performance[option] =
@@ -1671,7 +2054,10 @@ local function CreateToggle(
             parent
         )
 
-    AddCorner(row, 7)
+    AddCorner(
+        row,
+        7
+    )
 
     Create(
         "TextLabel",
@@ -1702,7 +2088,9 @@ local function CreateToggle(
                 ),
 
             TextSize = 11,
-            Font = Enum.Font.GothamMedium,
+
+            Font =
+                Enum.Font.GothamMedium,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -1729,12 +2117,17 @@ local function CreateToggle(
                     ),
 
                 TextSize = 9,
-                Font = Enum.Font.GothamBold
+
+                Font =
+                    Enum.Font.GothamBold
             },
             row
         )
 
-    AddCorner(state, 6)
+    AddCorner(
+        state,
+        6
+    )
 
     local function Refresh()
 
@@ -1850,7 +2243,9 @@ local Options = {
     }
 }
 
-for index, option in ipairs(Options) do
+for index, option in ipairs(
+    Options
+) do
 
     CreateToggle(
         BoostList,
@@ -1895,7 +2290,9 @@ local StretchTitle =
                 ),
 
             TextSize = 17,
-            Font = Enum.Font.GothamBold,
+
+            Font =
+                Enum.Font.GothamBold,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -1970,7 +2367,9 @@ local StretchLabel =
                 ),
 
             TextSize = 10,
-            Font = Enum.Font.GothamMedium,
+
+            Font =
+                Enum.Font.GothamMedium,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -2021,15 +2420,24 @@ local StretchBox =
                 ),
 
             TextSize = 14,
-            Font = Enum.Font.GothamMedium,
+
+            Font =
+                Enum.Font.GothamMedium,
 
             ClearTextOnFocus = false
         },
         StretchPanel
     )
 
-AddCorner(StretchBox, 8)
-AddStroke(StretchBox, 0.55)
+AddCorner(
+    StretchBox,
+    8
+)
+
+AddStroke(
+    StretchBox,
+    0.55
+)
 
 local StretchInfo =
     Create(
@@ -2062,7 +2470,9 @@ local StretchInfo =
                 ),
 
             TextSize = 9,
-            Font = Enum.Font.Gotham,
+
+            Font =
+                Enum.Font.Gotham,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -2070,42 +2480,46 @@ local StretchInfo =
         StretchPanel
     )
 
-StretchToggle.Activated:Connect(function()
+StretchToggle.Activated:Connect(
+    function()
 
-    SetStretchEnabled(
-        not StretchEnabled
-    )
+        SetStretchEnabled(
+            not StretchEnabled
+        )
 
-    StretchToggle.Text =
-        StretchEnabled
-        and "STRETCH SCREEN: ON"
-        or "STRETCH SCREEN: OFF"
-
-end)
-
-StretchBox.FocusLost:Connect(function()
-
-    if SetStretchValue(
-        StretchBox.Text
-    ) then
-
-        StretchBox.Text =
-            string.format(
-                "%.2f",
-                StretchValue
-            )
-
-    else
-
-        StretchBox.Text =
-            string.format(
-                "%.2f",
-                StretchValue
-            )
+        StretchToggle.Text =
+            StretchEnabled
+            and "STRETCH SCREEN: ON"
+            or "STRETCH SCREEN: OFF"
 
     end
+)
 
-end)
+StretchBox.FocusLost:Connect(
+    function()
+
+        if SetStretchValue(
+            StretchBox.Text
+        ) then
+
+            StretchBox.Text =
+                string.format(
+                    "%.2f",
+                    StretchValue
+                )
+
+        else
+
+            StretchBox.Text =
+                string.format(
+                    "%.2f",
+                    StretchValue
+                )
+
+        end
+
+    end
+)
 
 --==================================================--
 -- SKY PANEL
@@ -2141,7 +2555,9 @@ local SkyTitle =
                 ),
 
             TextSize = 17,
-            Font = Enum.Font.GothamBold,
+
+            Font =
+                Enum.Font.GothamBold,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -2185,7 +2601,10 @@ local SkyStatus =
 
             BackgroundTransparency = 1,
 
-            Text = "Selecione um céu",
+            Text =
+                SkySelected
+                and "SALVO: " .. SkySelected
+                or "Selecione um céu",
 
             TextColor3 =
                 Color3.fromRGB(
@@ -2195,7 +2614,9 @@ local SkyStatus =
                 ),
 
             TextSize = 10,
-            Font = Enum.Font.GothamMedium,
+
+            Font =
+                Enum.Font.GothamMedium,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -2222,6 +2643,7 @@ local SkyListFrame =
                 ),
 
             BackgroundTransparency = 1,
+
             BorderSizePixel = 0,
 
             ScrollBarThickness = 3,
@@ -2293,8 +2715,15 @@ local function CreateSkyCard(
             SkyListFrame
         )
 
-    AddCorner(card, 9)
-    AddStroke(card, 0.65)
+    AddCorner(
+        card,
+        9
+    )
+
+    AddStroke(
+        card,
+        0.65
+    )
 
     Create(
         "ImageLabel",
@@ -2321,9 +2750,9 @@ local function CreateSkyCard(
             BorderSizePixel = 0,
 
             Image =
-                "rbxthumb://type=Asset&id=" ..
-                tostring(skyInfo.Id) ..
-                "&w=420&h=420",
+                "rbxthumb://type=Asset&id="
+                .. tostring(skyInfo.Id)
+                .. "&w=420&h=420",
 
             ScaleType =
                 Enum.ScaleType.Crop
@@ -2350,7 +2779,8 @@ local function CreateSkyCard(
 
             BackgroundTransparency = 1,
 
-            Text = skyInfo.Name,
+            Text =
+                skyInfo.Name,
 
             TextColor3 =
                 Color3.fromRGB(
@@ -2360,7 +2790,9 @@ local function CreateSkyCard(
                 ),
 
             TextSize = 11,
-            Font = Enum.Font.GothamBold,
+
+            Font =
+                Enum.Font.GothamBold,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left,
@@ -2391,8 +2823,8 @@ local function CreateSkyCard(
             BackgroundTransparency = 1,
 
             Text =
-                "ID: " ..
-                tostring(skyInfo.Id),
+                "ID: "
+                .. tostring(skyInfo.Id),
 
             TextColor3 =
                 Color3.fromRGB(
@@ -2402,7 +2834,9 @@ local function CreateSkyCard(
                 ),
 
             TextSize = 9,
-            Font = Enum.Font.Gotham,
+
+            Font =
+                Enum.Font.Gotham,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -2410,32 +2844,35 @@ local function CreateSkyCard(
         card
     )
 
-    card.Activated:Connect(function()
+    card.Activated:Connect(
+        function()
 
-        if SkyLoading then
-            return
-        end
+            if SkyLoading then
+                return
+            end
 
-        SkyStatus.Text =
-            "CARREGANDO: " ..
-            skyInfo.Name
+            SkyStatus.Text =
+                "CARREGANDO: "
+                .. skyInfo.Name
 
-        task.spawn(function()
+            task.spawn(
+                function()
 
-            ApplySky(
-                skyInfo,
-                function(message)
+                    ApplySky(
+                        skyInfo,
+                        function(message)
 
-                    SkyStatus.Text =
-                        message
+                            SkyStatus.Text =
+                                message
+
+                        end
+                    )
 
                 end
             )
 
-        end)
-
-    end)
-
+        end
+    )
 end
 
 for index, skyInfo in ipairs(
@@ -2450,10 +2887,10 @@ for index, skyInfo in ipairs(
 end
 
 --==================================================--
--- HUD
+-- HUD FPS / MS
 --==================================================--
 
-local HUD =
+HUD =
     Create(
         "Frame",
         {
@@ -2464,11 +2901,9 @@ local HUD =
                 ),
 
             Position =
-                UDim2.new(
-                    0,
-                    16,
-                    0,
-                    80
+                UDim2.fromOffset(
+                    SavedHUDPosition.X,
+                    SavedHUDPosition.Y
                 ),
 
             BackgroundColor3 =
@@ -2487,8 +2922,15 @@ local HUD =
         ScreenGui
     )
 
-AddCorner(HUD, 11)
-AddStroke(HUD, 0.45)
+AddCorner(
+    HUD,
+    11
+)
+
+AddStroke(
+    HUD,
+    0.45
+)
 
 Create(
     "TextLabel",
@@ -2519,7 +2961,9 @@ Create(
             ),
 
         TextSize = 12,
-        Font = Enum.Font.GothamBold,
+
+        Font =
+            Enum.Font.GothamBold,
 
         TextXAlignment =
             Enum.TextXAlignment.Left
@@ -2557,7 +3001,9 @@ local FPSLabel =
                 ),
 
             TextSize = 11,
-            Font = Enum.Font.GothamMedium,
+
+            Font =
+                Enum.Font.GothamMedium,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -2597,7 +3043,9 @@ local MSLabel =
                 ),
 
             TextSize = 11,
-            Font = Enum.Font.GothamMedium,
+
+            Font =
+                Enum.Font.GothamMedium,
 
             TextXAlignment =
                 Enum.TextXAlignment.Left
@@ -2646,16 +3094,26 @@ local OpenButton =
                 ),
 
             TextSize = 17,
-            Font = Enum.Font.GothamBold,
+
+            Font =
+                Enum.Font.GothamBold,
 
             Active = true,
+
             Visible = false
         },
         ScreenGui
     )
 
-AddCorner(OpenButton, 22)
-AddStroke(OpenButton, 0.3)
+AddCorner(
+    OpenButton,
+    22
+)
+
+AddStroke(
+    OpenButton,
+    0.3
+)
 
 --==================================================--
 -- NAVIGATION
@@ -2664,10 +3122,12 @@ AddStroke(OpenButton, 0.3)
 local function HideAllPanels()
 
     Main.Visible = false
-    BoostPanel.Visible = false
-    StretchPanel.Visible = false
-    SkyPanel.Visible = false
 
+    BoostPanel.Visible = false
+
+    StretchPanel.Visible = false
+
+    SkyPanel.Visible = false
 end
 
 local function ShowMain()
@@ -2675,7 +3135,6 @@ local function ShowMain()
     HideAllPanels()
 
     Main.Visible = true
-
 end
 
 local function ShowBoost()
@@ -2683,7 +3142,6 @@ local function ShowBoost()
     HideAllPanels()
 
     BoostPanel.Visible = true
-
 end
 
 local function ShowStretch()
@@ -2691,7 +3149,6 @@ local function ShowStretch()
     HideAllPanels()
 
     StretchPanel.Visible = true
-
 end
 
 local function ShowSky()
@@ -2699,7 +3156,6 @@ local function ShowSky()
     HideAllPanels()
 
     SkyPanel.Visible = true
-
 end
 
 local function CloseMenu()
@@ -2707,8 +3163,8 @@ local function CloseMenu()
     HideAllPanels()
 
     HUD.Visible = true
-    OpenButton.Visible = true
 
+    OpenButton.Visible = true
 end
 
 local function OpenMenu()
@@ -2718,8 +3174,8 @@ local function OpenMenu()
     Main.Visible = true
 
     HUD.Visible = false
-    OpenButton.Visible = false
 
+    OpenButton.Visible = false
 end
 
 local FPSBoostButton =
@@ -2816,7 +3272,9 @@ local function MakeDraggable(
 )
 
     local dragging = false
+
     local dragStart
+
     local startPosition
 
     handle.InputBegan:Connect(
@@ -2853,8 +3311,8 @@ local function MakeDraggable(
                 Enum.UserInputType.MouseMovement then
 
                 local delta =
-                    input.Position -
-                    dragStart
+                    input.Position
+                    - dragStart
 
                 object.Position =
                     UDim2.fromOffset(
@@ -2879,6 +3337,22 @@ local function MakeDraggable(
                 Enum.UserInputType.MouseButton1 then
 
                 dragging = false
+
+                --================================================--
+                -- SALVAR POSIÇÃO DO HUD
+                --================================================--
+
+                if object == HUD then
+
+                    SavedHUDPosition.X =
+                        HUD.Position.X.Offset
+
+                    SavedHUDPosition.Y =
+                        HUD.Position.Y.Offset
+
+                    SaveSettings()
+
+                end
 
             end
 
@@ -2916,6 +3390,7 @@ MakeDraggable(
 --==================================================--
 
 local FPSFrames = 0
+
 local FPSAccumulator = 0
 
 RunService.RenderStepped:Connect(
@@ -2923,23 +3398,27 @@ RunService.RenderStepped:Connect(
 
         if not deltaTime
             or deltaTime <= 0 then
+
             return
         end
 
         FPSFrames += 1
-        FPSAccumulator += deltaTime
+
+        FPSAccumulator +=
+            deltaTime
 
         if FPSAccumulator >= 0.5 then
 
             local fps =
-                FPSFrames /
-                FPSAccumulator
+                FPSFrames
+                / FPSAccumulator
 
-            if fps == fps and fps > 0 then
+            if fps == fps
+                and fps > 0 then
 
                 FPSLabel.Text =
-                    "FPS: " ..
-                    tostring(
+                    "FPS: "
+                    .. tostring(
                         math.floor(
                             fps + 0.5
                         )
@@ -2948,6 +3427,7 @@ RunService.RenderStepped:Connect(
             end
 
             FPSFrames = 0
+
             FPSAccumulator = 0
 
         end
@@ -2998,10 +3478,12 @@ local function GetPing()
                         )
 
                     if number then
+
                         ping =
                             math.floor(
                                 number + 0.5
                             )
+
                     end
 
                 end
@@ -3015,32 +3497,34 @@ local function GetPing()
     return ping
 end
 
-task.spawn(function()
+task.spawn(
+    function()
 
-    while ScreenGui
-        and ScreenGui.Parent do
+        while ScreenGui
+            and ScreenGui.Parent do
 
-        local ping =
-            GetPing()
+            local ping =
+                GetPing()
 
-        if ping then
+            if ping then
 
-            MSLabel.Text =
-                "MS: " ..
-                tostring(ping)
+                MSLabel.Text =
+                    "MS: "
+                    .. tostring(ping)
 
-        else
+            else
 
-            MSLabel.Text =
-                "MS: --"
+                MSLabel.Text =
+                    "MS: --"
+
+            end
+
+            task.wait(1)
 
         end
 
-        task.wait(1)
-
     end
-
-end)
+)
 
 --==================================================--
 -- CHARACTER
@@ -3058,35 +3542,39 @@ local function SetupCharacter(
         return
     end
 
-    task.defer(function()
+    task.defer(
+        function()
 
-        pcall(function()
+            pcall(function()
 
-            for _, object in ipairs(
-                character:GetDescendants()
-            ) do
-
-                ApplyPerformanceObject(
-                    object
-                )
-
-            end
-
-        end)
-
-    end)
-
-    CharacterConnections.DescendantAdded =
-        character.DescendantAdded:Connect(
-            function(object)
-
-                task.defer(function()
+                for _, object in ipairs(
+                    character:GetDescendants()
+                ) do
 
                     ApplyPerformanceObject(
                         object
                     )
 
-                end)
+                end
+
+            end)
+
+        end
+    )
+
+    CharacterConnections.DescendantAdded =
+        character.DescendantAdded:Connect(
+            function(object)
+
+                task.defer(
+                    function()
+
+                        ApplyPerformanceObject(
+                            object
+                        )
+
+                    end
+                )
 
             end
         )
@@ -3131,7 +3619,9 @@ pcall(
 HideAllPanels()
 
 Main.Visible = true
+
 HUD.Visible = false
+
 OpenButton.Visible = false
 
 --==================================================--
@@ -3140,7 +3630,46 @@ OpenButton.Visible = false
 
 if StretchEnabled then
 
-    SetStretchEnabled(true)
+    SetStretchEnabled(
+        true
+    )
+
+end
+
+--==================================================--
+-- RESTORE SAVED SKY
+--==================================================--
+
+if SkySelected then
+
+    for _, skyInfo in ipairs(
+        SKY_LIST
+    ) do
+
+        if skyInfo.Name ==
+            SkySelected then
+
+            task.delay(
+                1,
+                function()
+
+                    ApplySky(
+                        skyInfo,
+                        function(message)
+
+                            SkyStatus.Text =
+                                message
+
+                        end
+                    )
+
+                end
+            )
+
+            break
+        end
+
+    end
 
 end
 
@@ -3148,23 +3677,27 @@ end
 -- AUTO SAVE LOOP
 --==================================================--
 
-task.spawn(function()
+task.spawn(
+    function()
 
-    while ScreenGui
-        and ScreenGui.Parent do
+        while ScreenGui
+            and ScreenGui.Parent do
 
-        if CONFIG.AutoSave then
-            SaveSettings()
+            if CONFIG.AutoSave then
+
+                SaveSettings()
+
+            end
+
+            task.wait(5)
+
         end
 
-        task.wait(5)
-
     end
-
-end)
+)
 
 --==================================================--
--- DONE
+-- FINAL SAVE
 --==================================================--
 
 pcall(function()
@@ -3172,3 +3705,7 @@ pcall(function()
     SaveSettings()
 
 end)
+
+--==================================================--
+-- SKYLARP V2 LOADED
+--==================================================--
