@@ -52,6 +52,16 @@ local SHADER_CONFIG = {
     ShaderSkyEnabled = true,
     VignetteEnabled = true,
 
+    -- NOVO:
+    -- Controle da iluminação do HD GRAPHICS
+    LightEnabled = true,
+
+    Light = {
+        R = 255,
+        G = 255,
+        B = 255
+    },
+
     Bloom = {
         Intensity = 0.30,
         Size = 10,
@@ -154,7 +164,6 @@ end
 --==================================================--
 
 local SKY_LIST = {
-
     {Name = "Minecraft Sky", Id = 10594760952},
     {Name = "Cloudy Sky", Id = 10594745862},
     {Name = "Spiral Galaxy Skybox", Id = 91546602453505},
@@ -179,7 +188,6 @@ local SKY_LIST = {
 --==================================================--
 
 local function SafeSet(object, property, value)
-
     if not object then
         return false
     end
@@ -190,7 +198,6 @@ local function SafeSet(object, property, value)
 end
 
 local function SafeGet(object, property)
-
     if not object then
         return nil
     end
@@ -205,7 +212,6 @@ local function SafeGet(object, property)
 end
 
 local function SafeDestroy(object)
-
     if not object then
         return
     end
@@ -216,7 +222,6 @@ local function SafeDestroy(object)
 end
 
 local function ClampNumber(value, min, max, default)
-
     local number = tonumber(value)
 
     if not number then
@@ -231,7 +236,6 @@ local function ClampNumber(value, min, max, default)
 end
 
 local function RGB(r, g, b)
-
     return Color3.fromRGB(
         math.clamp(tonumber(r) or 0, 0, 255),
         math.clamp(tonumber(g) or 0, 0, 255),
@@ -260,14 +264,9 @@ local SavedHUDPosition = {
 --==================================================--
 
 local function CanUseFileSystem()
-
     return typeof(readfile) == "function"
         and typeof(writefile) == "function"
 end
-
---==================================================--
--- LOAD SETTINGS
---==================================================--
 
 local function LoadSettings()
 
@@ -301,13 +300,11 @@ LoadSettings()
 --==================================================--
 
 if type(SavedSettings.StretchValue) == "number" then
-
     StretchValue = math.clamp(
         SavedSettings.StretchValue,
         CONFIG.StretchMin,
         CONFIG.StretchMax
     )
-
 end
 
 if type(SavedSettings.StretchEnabled) == "boolean" then
@@ -320,9 +317,7 @@ end
 
 if type(SavedSettings.SkySelected) == "string"
 and SavedSettings.SkySelected ~= "" then
-
     SkySelected = SavedSettings.SkySelected
-
 end
 
 --==================================================--
@@ -338,7 +333,6 @@ if type(SavedSettings.HUDPosition) == "table" then
     if type(SavedSettings.HUDPosition.Y) == "number" then
         SavedHUDPosition.Y = SavedSettings.HUDPosition.Y
     end
-
 end
 
 --==================================================--
@@ -353,11 +347,8 @@ if type(SavedSettings.Performance) == "table" then
         and type(value) == "boolean" then
 
             CONFIG.Performance[option] = value
-
         end
-
     end
-
 end
 
 --==================================================--
@@ -376,6 +367,28 @@ local function RestoreShaderSettings()
         SHADER_CONFIG.Enabled = data.Enabled
     end
 
+    if type(data.LightEnabled) == "boolean" then
+        SHADER_CONFIG.LightEnabled = data.LightEnabled
+    end
+
+    if type(data.Light) == "table" then
+
+        if type(data.Light.R) == "number" then
+            SHADER_CONFIG.Light.R =
+                math.clamp(data.Light.R, 0, 255)
+        end
+
+        if type(data.Light.G) == "number" then
+            SHADER_CONFIG.Light.G =
+                math.clamp(data.Light.G, 0, 255)
+        end
+
+        if type(data.Light.B) == "number" then
+            SHADER_CONFIG.Light.B =
+                math.clamp(data.Light.B, 0, 255)
+        end
+    end
+
     local toggles = {
         "BloomEnabled",
         "BlurEnabled",
@@ -391,7 +404,6 @@ local function RestoreShaderSettings()
         if type(data[key]) == "boolean" then
             SHADER_CONFIG[key] = data[key]
         end
-
     end
 
     local groups = {
@@ -414,13 +426,9 @@ local function RestoreShaderSettings()
                 if type(value) == "number" then
                     SHADER_CONFIG[groupName][key] = value
                 end
-
             end
-
         end
-
     end
-
 end
 
 RestoreShaderSettings()
@@ -442,6 +450,7 @@ end)
 --==================================================--
 
 local HUD = nil
+local ScreenGui = nil
 
 --==================================================--
 -- SAVE SETTINGS
@@ -484,7 +493,17 @@ local function SaveSettings()
         Performance = {},
 
         Shader = {
+
             Enabled = SHADER_CONFIG.Enabled,
+
+            LightEnabled =
+                SHADER_CONFIG.LightEnabled,
+
+            Light = {
+                R = SHADER_CONFIG.Light.R,
+                G = SHADER_CONFIG.Light.G,
+                B = SHADER_CONFIG.Light.B
+            },
 
             BloomEnabled =
                 SHADER_CONFIG.BloomEnabled,
@@ -631,7 +650,6 @@ local function DisconnectConnection(connection)
         end)
 
     end
-
 end
 
 local function DisconnectList(list)
@@ -642,7 +660,6 @@ local function DisconnectList(list)
         list[key] = nil
 
     end
-
 end
 
 local function IsCharacterPart(object)
@@ -701,11 +718,8 @@ local function ApplyNoCameraEffects()
             and not IsSKYLARPEffect(object) then
 
                 SafeDestroy(object)
-
             end
-
         end
-
     end)
 end
 
@@ -732,16 +746,13 @@ local function ApplyNoClothes(object)
 
             SafeDestroy(object)
             return
-
         end
 
         if object:IsA("Accessory")
         and IsCharacterPart(object) then
 
             SafeDestroy(object)
-
         end
-
     end)
 end
 
@@ -765,7 +776,6 @@ local function ApplyLowWater(object)
             SafeSet(object, "WaterTransparency", 1)
 
         end
-
     end)
 end
 
@@ -784,7 +794,6 @@ local function ApplyNoShadows(object)
         if object:IsA("BasePart") then
             SafeSet(object, "CastShadow", false)
         end
-
     end)
 end
 
@@ -804,7 +813,6 @@ local function ApplyLowRendering()
         pcall(function()
             Lighting.GlobalShadows = false
         end)
-
     end
 end
 
@@ -822,12 +830,7 @@ local function ApplyLowQualityParts(object)
 
         if object:IsA("BasePart") then
 
-            SafeSet(
-                object,
-                "Reflectance",
-                0
-            )
-
+            SafeSet(object, "Reflectance", 0)
             SafeSet(
                 object,
                 "Material",
@@ -841,11 +844,8 @@ local function ApplyLowQualityParts(object)
                     "RenderFidelity",
                     Enum.RenderFidelity.Performance
                 )
-
             end
-
         end
-
     end)
 end
 
@@ -876,9 +876,7 @@ local function ApplyLowQualityModels(object)
                 "CastShadow",
                 false
             )
-
         end
-
     end)
 end
 
@@ -907,9 +905,7 @@ local function ApplyResetMaterials(object)
                 "Reflectance",
                 0
             )
-
         end
-
     end)
 end
 
@@ -933,9 +929,7 @@ local function ApplyRemoveParticles(object)
         or object:IsA("Sparkles") then
 
             SafeDestroy(object)
-
         end
-
     end)
 end
 
@@ -956,15 +950,9 @@ local function ApplyRemoveLights(object)
         or object:IsA("SurfaceLight") then
 
             SafeDestroy(object)
-
         end
-
     end)
 end
-
---==================================================--
--- REMOVE CLOUDS
---==================================================--
 
 local function ApplyRemoveClouds(object)
 
@@ -981,7 +969,6 @@ local function ApplyRemoveClouds(object)
         if object:IsA("Clouds") then
             SafeDestroy(object)
         end
-
     end)
 end
 
@@ -1000,9 +987,7 @@ local function RemoveAllClouds()
             if object:IsA("Clouds") then
                 SafeDestroy(object)
             end
-
         end
-
     end)
 
     pcall(function()
@@ -1019,11 +1004,8 @@ local function RemoveAllClouds()
                 if object:IsA("Clouds") then
                     SafeDestroy(object)
                 end
-
             end
-
         end
-
     end)
 end
 
@@ -1031,7 +1013,6 @@ local function ApplyPerformanceObject(object)
 
     if not object
     or not object.Parent then
-
         return
     end
 
@@ -1054,9 +1035,7 @@ local function ScanWorkspaceOnce()
         ) do
 
             ApplyPerformanceObject(object)
-
         end
-
     end)
 
     ApplyNoCameraEffects()
@@ -1085,11 +1064,8 @@ local function SetupPerformanceConnections()
                     and object.Parent then
 
                         ApplyPerformanceObject(object)
-
                     end
-
                 end)
-
             end
         )
 
@@ -1104,9 +1080,7 @@ local function SetupPerformanceConnections()
                     if object then
                         ApplyRemoveLights(object)
                     end
-
                 end)
-
             end
         )
 end
@@ -1117,6 +1091,17 @@ end
 
 local StretchConnection = nil
 
+-- CORREÇÃO DO SLIDER
+local StretchDragging = false
+local StretchDragInput = nil
+
+local function StopStretchDragging()
+
+    StretchDragging = false
+    StretchDragInput = nil
+
+end
+
 local function DisconnectStretch()
 
     if StretchConnection then
@@ -1126,9 +1111,7 @@ local function DisconnectStretch()
         end)
 
         StretchConnection = nil
-
     end
-
 end
 
 local function ApplyRealStretch()
@@ -1163,7 +1146,6 @@ local function ApplyRealStretch()
                 0, scale, 0,
                 0, 0, 1
             )
-
     end)
 end
 
@@ -1179,7 +1161,6 @@ local function SetStretchEnabled(enabled)
             RunService.RenderStepped:Connect(
                 ApplyRealStretch
             )
-
     end
 
     SaveSettings()
@@ -1235,25 +1216,20 @@ local function CloneSkyProperties(
 
     if not sourceSky
     or not targetSky then
-
         return false
     end
 
     local properties = {
-
         "SkyboxBk",
         "SkyboxDn",
         "SkyboxFt",
         "SkyboxLf",
         "SkyboxRt",
         "SkyboxUp",
-
         "SunAngularSize",
         "SunTextureId",
-
         "MoonTextureId",
         "MoonAngularSize",
-
         "StarCount",
         "CelestialBodiesShown"
     }
@@ -1268,9 +1244,7 @@ local function CloneSkyProperties(
             if value ~= nil then
                 targetSky[property] = value
             end
-
         end)
-
     end
 
     return true
@@ -1297,7 +1271,6 @@ local function RemoveCurrentSky()
         if shaderSky then
             SafeDestroy(shaderSky)
         end
-
     end)
 
     CurrentSky = nil
@@ -1315,7 +1288,6 @@ local function LoadSkyAsset(assetId)
         if container then
             table.insert(objects, container)
         end
-
     end)
 
     if #objects > 0 then
@@ -1337,11 +1309,8 @@ local function LoadSkyAsset(assetId)
                 for _, object in ipairs(result) do
                     table.insert(objects, object)
                 end
-
             end
-
         end
-
     end)
 
     return objects
@@ -1358,7 +1327,6 @@ local function ApplySky(
 
     if not skyInfo
     or not skyInfo.Id then
-
         return false
     end
 
@@ -1367,12 +1335,12 @@ local function ApplySky(
     if statusCallback then
 
         pcall(function()
+
             statusCallback(
                 "CARREGANDO: "
                 .. skyInfo.Name
             )
         end)
-
     end
 
     local temporaryObjects = {}
@@ -1395,7 +1363,6 @@ local function ApplySky(
         if sourceSky then
             break
         end
-
     end
 
     if sourceSky then
@@ -1441,9 +1408,7 @@ local function ApplySky(
             and newSky.Parent == Lighting then
 
                 CurrentSky = newSky
-
-                SkySelected =
-                    skyInfo.Name
+                SkySelected = skyInfo.Name
 
                 SaveSettings()
 
@@ -1455,21 +1420,17 @@ local function ApplySky(
                             "ATIVO: "
                             .. skyInfo.Name
                         )
-
                     end)
-
                 end
 
             else
 
                 SafeDestroy(newSky)
-
             end
 
         else
 
             SafeDestroy(newSky)
-
         end
 
     else
@@ -1481,11 +1442,8 @@ local function ApplySky(
                 statusCallback(
                     "ERRO: SKY NÃO ENCONTRADO"
                 )
-
             end)
-
         end
-
     end
 
     for _, object in ipairs(temporaryObjects) do
@@ -1493,7 +1451,6 @@ local function ApplySky(
         if object then
             SafeDestroy(object)
         end
-
     end
 
     SkyLoading = false
@@ -1538,25 +1495,43 @@ local function CaptureLighting()
         SafeGet(Lighting, "OutdoorAmbient")
 
     ShaderOriginal.EnvironmentDiffuseScale =
-        SafeGet(Lighting, "EnvironmentDiffuseScale")
+        SafeGet(
+            Lighting,
+            "EnvironmentDiffuseScale"
+        )
 
     ShaderOriginal.EnvironmentSpecularScale =
-        SafeGet(Lighting, "EnvironmentSpecularScale")
+        SafeGet(
+            Lighting,
+            "EnvironmentSpecularScale"
+        )
 
     ShaderOriginal.GlobalShadows =
-        SafeGet(Lighting, "GlobalShadows")
+        SafeGet(
+            Lighting,
+            "GlobalShadows"
+        )
 
     ShaderOriginal.ShadowSoftness =
-        SafeGet(Lighting, "ShadowSoftness")
+        SafeGet(
+            Lighting,
+            "ShadowSoftness"
+        )
 
     ShaderOriginal.ClockTime =
         SafeGet(Lighting, "ClockTime")
 
     ShaderOriginal.GeographicLatitude =
-        SafeGet(Lighting, "GeographicLatitude")
+        SafeGet(
+            Lighting,
+            "GeographicLatitude"
+        )
 
     ShaderOriginal.ExposureCompensation =
-        SafeGet(Lighting, "ExposureCompensation")
+        SafeGet(
+            Lighting,
+            "ExposureCompensation"
+        )
 end
 
 local function RemoveShaderEffects()
@@ -1570,9 +1545,7 @@ local function RemoveShaderEffects()
             if HD_EFFECT_NAMES[object.Name] then
                 SafeDestroy(object)
             end
-
         end
-
     end)
 
     pcall(function()
@@ -1586,7 +1559,6 @@ local function RemoveShaderEffects()
         if gui then
             SafeDestroy(gui)
         end
-
     end)
 
     pcall(function()
@@ -1599,8 +1571,76 @@ local function RemoveShaderEffects()
         if gui then
             SafeDestroy(gui)
         end
-
     end)
+end
+
+--==================================================--
+-- NOVA LUZ HD
+--==================================================--
+
+local function ApplyHDLight()
+
+    local L =
+        SHADER_CONFIG.Light
+
+    if SHADER_CONFIG.LightEnabled then
+
+        -- Cor escolhida pelo usuário
+        SafeSet(
+            Lighting,
+            "Ambient",
+            RGB(
+                L.R,
+                L.G,
+                L.B
+            )
+        )
+
+        SafeSet(
+            Lighting,
+            "OutdoorAmbient",
+            RGB(
+                L.R,
+                L.G,
+                L.B
+            )
+        )
+
+        SafeSet(
+            Lighting,
+            "Brightness",
+            SHADER_CONFIG.Lighting.Brightness
+        )
+
+    else
+
+        -- LUZ OFF
+        SafeSet(
+            Lighting,
+            "Ambient",
+            Color3.fromRGB(
+                0,
+                0,
+                0
+            )
+        )
+
+        SafeSet(
+            Lighting,
+            "OutdoorAmbient",
+            Color3.fromRGB(
+                0,
+                0,
+                0
+            )
+        )
+
+        SafeSet(
+            Lighting,
+            "Brightness",
+            0
+        )
+    end
 end
 
 local function ApplyShaderLighting()
@@ -1610,31 +1650,15 @@ local function ApplyShaderLighting()
     local L =
         SHADER_CONFIG.Lighting
 
-    SafeSet(
-        Lighting,
-        "Brightness",
-        L.Brightness
-    )
+    --================================================--
+    -- LUZ PERSONALIZADA
+    --================================================--
 
-    SafeSet(
-        Lighting,
-        "Ambient",
-        RGB(
-            L.AmbientR,
-            L.AmbientG,
-            L.AmbientB
-        )
-    )
+    ApplyHDLight()
 
-    SafeSet(
-        Lighting,
-        "OutdoorAmbient",
-        RGB(
-            L.OutdoorR,
-            L.OutdoorG,
-            L.OutdoorB
-        )
-    )
+    --================================================--
+    -- RESTANTE DO LIGHTING
+    --==================================================
 
     SafeSet(
         Lighting,
@@ -1691,7 +1715,7 @@ local function ApplyShaders()
 
     --================================================--
     -- BLOOM
-    --================================================--
+    --==================================================
 
     if SHADER_CONFIG.BloomEnabled then
 
@@ -1710,12 +1734,11 @@ local function ApplyShaders()
             SHADER_CONFIG.Bloom.Threshold
 
         Bloom.Parent = Lighting
-
     end
 
     --================================================--
     -- BLUR
-    --================================================--
+    --==================================================
 
     if SHADER_CONFIG.BlurEnabled then
 
@@ -1728,7 +1751,6 @@ local function ApplyShaders()
             SHADER_CONFIG.Blur.Size
 
         Blur.Parent = Lighting
-
     end
 
     --================================================--
@@ -1762,12 +1784,11 @@ local function ApplyShaders()
             )
 
         ColorCor.Parent = Lighting
-
     end
 
     --================================================--
     -- SUN RAYS
-    --================================================--
+    --==================================================
 
     if SHADER_CONFIG.SunRaysEnabled then
 
@@ -1784,12 +1805,11 @@ local function ApplyShaders()
             SHADER_CONFIG.SunRays.Spread
 
         SunRays.Parent = Lighting
-
     end
 
     --================================================--
     -- ATMOSPHERE
-    --================================================--
+    --==================================================
 
     if SHADER_CONFIG.AtmosphereEnabled then
 
@@ -1826,13 +1846,11 @@ local function ApplyShaders()
             SHADER_CONFIG.Atmosphere.Haze
 
         Atm.Parent = Lighting
-
     end
 
     --================================================--
     -- SHADER SKY
-    --================================================--
-    -- SKY SELECTOR TEM PRIORIDADE
+    --==================================================--
 
     if SHADER_CONFIG.ShaderSkyEnabled
     and not CurrentSky
@@ -1866,18 +1884,17 @@ local function ApplyShaders()
             SHADER_CONFIG.ShaderSky.SunAngularSize
 
         Sky.Parent = Lighting
-
     end
 
     --================================================--
     -- LIGHTING
-    --================================================--
+    --==================================================
 
     ApplyShaderLighting()
 
     --================================================--
     -- VIGNETTE
-    --================================================--
+    --==================================================
 
     if SHADER_CONFIG.VignetteEnabled then
 
@@ -1915,7 +1932,6 @@ local function ApplyShaders()
 
         Vignette.Parent =
             targetParent
-
     end
 end
 
@@ -2016,10 +2032,7 @@ pcall(function()
     if old then
         old:Destroy()
     end
-
 end)
-
-local ScreenGui
 
 pcall(function()
 
@@ -2043,7 +2056,6 @@ pcall(function()
 
     ScreenGui.Parent =
         CoreGui
-
 end)
 
 if not ScreenGui then
@@ -2073,7 +2085,6 @@ if not ScreenGui then
 
     ScreenGui.Parent =
         PlayerGui
-
 end
 
 --==================================================--
@@ -2096,7 +2107,6 @@ local function Create(
         pcall(function()
             object[property] = value
         end)
-
     end
 
     if parent then
@@ -2106,10 +2116,7 @@ local function Create(
     return object
 end
 
-local function AddCorner(
-    object,
-    radius
-)
+local function AddCorner(object, radius)
 
     return Create(
         "UICorner",
@@ -2124,10 +2131,7 @@ local function AddCorner(
     )
 end
 
-local function AddStroke(
-    object,
-    transparency
-)
+local function AddStroke(object, transparency)
 
     return Create(
         "UIStroke",
@@ -2485,10 +2489,6 @@ local SkyPanel =
 AddCorner(SkyPanel, 14)
 AddStroke(SkyPanel, 0.3)
 
---==================================================--
--- HD PANEL
---==================================================--
-
 local HDPanel =
     Create(
         "Frame",
@@ -2642,7 +2642,6 @@ local function SetPerformanceOption(
         task.spawn(function()
             pcall(ScanWorkspaceOnce)
         end)
-
     end
 
     SaveSettings()
@@ -2795,9 +2794,7 @@ local function CreateToggle(
                     185,
                     190
                 )
-
         end
-
     end
 
     row.Activated:Connect(function()
@@ -2808,7 +2805,6 @@ local function CreateToggle(
         )
 
         Refresh()
-
     end)
 
     Refresh()
@@ -2817,7 +2813,6 @@ local function CreateToggle(
 end
 
 local Options = {
-
     {"No Camera Effects", "NoCameraEffects"},
     {"No Clothes", "NoClothes"},
     {"Low Water Graphics", "LowWaterGraphics"},
@@ -2839,7 +2834,6 @@ for index, option in ipairs(Options) do
         option[2],
         index
     )
-
 end
 
 --==================================================--
@@ -3216,6 +3210,10 @@ local function SetStretchFromSlider(
     RefreshStretchSlider()
 end
 
+--==================================================--
+-- STRETCH TOUCH CORRIGIDO
+--==================================================--
+
 StretchSlider.InputBegan:Connect(
     function(input)
 
@@ -3224,60 +3222,86 @@ StretchSlider.InputBegan:Connect(
             or input.UserInputType ==
             Enum.UserInputType.MouseButton1 then
 
+            StretchDragging = true
+            StretchDragInput = input
+
             SetStretchFromSlider(
                 input.Position.X
             )
-
         end
-
     end
 )
 
 UserInputService.InputChanged:Connect(
     function(input)
 
-        if input.UserInputType ==
-            Enum.UserInputType.Touch
-            or input.UserInputType ==
-            Enum.UserInputType.MouseMovement then
-
-            if UserInputService:IsMouseButtonPressed(
-                Enum.UserInputType.MouseButton1
-            ) then
-
-                if StretchSlider.Visible then
-
-                    local p =
-                        input.Position
-
-                    local pos =
-                        StretchSlider.AbsolutePosition
-
-                    local size =
-                        StretchSlider.AbsoluteSize
-
-                    if p.X >= pos.X
-                    and p.X <= pos.X + size.X
-                    and p.Y >= pos.Y - 20
-                    and p.Y <= pos.Y + size.Y + 20 then
-
-                        SetStretchFromSlider(
-                            p.X
-                        )
-
-                    end
-
-                end
-
-            end
-
+        if not StretchDragging then
+            return
         end
 
+        if not StretchSlider.Visible then
+            StopStretchDragging()
+            return
+        end
+
+        -- TOUCH:
+        -- somente o mesmo dedo que iniciou o slider
+        if StretchDragInput
+        and StretchDragInput.UserInputType ==
+            Enum.UserInputType.Touch then
+
+            if input ~= StretchDragInput then
+                return
+            end
+
+            SetStretchFromSlider(
+                input.Position.X
+            )
+
+            return
+        end
+
+        -- MOUSE:
+        if StretchDragInput
+        and StretchDragInput.UserInputType ==
+            Enum.UserInputType.MouseButton1 then
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseMovement then
+
+                SetStretchFromSlider(
+                    input.Position.X
+                )
+            end
+        end
     end
 )
 
+UserInputService.InputEnded:Connect(
+    function(input)
+
+        if input == StretchDragInput
+        or (
+            StretchDragInput
+            and StretchDragInput.UserInputType ==
+                Enum.UserInputType.MouseButton1
+            and input.UserInputType ==
+                Enum.UserInputType.MouseButton1
+        ) then
+
+            StopStretchDragging()
+        end
+    end
+)
+
+StretchBox.Focused:Connect(function()
+    StopStretchDragging()
+end)
+
 StretchBox.FocusLost:Connect(
     function()
+
+        StopStretchDragging()
 
         if SetStretchValue(
             StretchBox.Text
@@ -3288,14 +3312,14 @@ StretchBox.FocusLost:Connect(
         else
 
             RefreshStretchSlider()
-
         end
-
     end
 )
 
 StretchToggle.Activated:Connect(
     function()
+
+        StopStretchDragging()
 
         SetStretchEnabled(
             not StretchEnabled
@@ -3305,7 +3329,6 @@ StretchToggle.Activated:Connect(
             StretchEnabled
             and "STRETCH SCREEN: ON"
             or "STRETCH SCREEN: OFF"
-
     end
 )
 
@@ -3634,13 +3657,10 @@ local function CreateSkyCard(
 
                             SkyStatus.Text =
                                 message
-
                         end
                     )
-
                 end
             )
-
         end
     )
 end
@@ -3880,9 +3900,7 @@ local function CreateHDToggle(
                     60,
                     68
                 )
-
         end
-
     end
 
     row.Activated:Connect(
@@ -3897,7 +3915,6 @@ local function CreateHDToggle(
 
             Refresh()
             SaveSettings()
-
         end
     )
 
@@ -3906,10 +3923,14 @@ local function CreateHDToggle(
     return row
 end
 
-local MasterShader =
+--==================================================--
+-- NOVA FUNÇÃO: TOGGLE DA LUZ
+--==================================================--
+
+local LightToggle =
     CreateHDToggle(
-        "SHADER",
-        "Enabled"
+        "LUZ",
+        "LightEnabled"
     )
 
 --==================================================--
@@ -4057,12 +4078,10 @@ local function CreateHDNumber(
                             min,
                             max
                         )
-
                 end
 
                 SHADER_CONFIG[group][key] =
                     number
-
             end
 
             box.Text =
@@ -4075,12 +4094,39 @@ local function CreateHDNumber(
             end
 
             SaveSettings()
-
         end
     )
 
     return box
 end
+
+--==================================================--
+-- NOVOS CAMPOS RGB DA LUZ
+--==================================================--
+
+CreateHDNumber(
+    "Luz R",
+    "Light",
+    "R",
+    0,
+    255
+)
+
+CreateHDNumber(
+    "Luz G",
+    "Light",
+    "G",
+    0,
+    255
+)
+
+CreateHDNumber(
+    "Luz B",
+    "Light",
+    "B",
+    0,
+    255
+)
 
 --==================================================--
 -- BLOOM
@@ -4578,47 +4624,44 @@ local CloseButton =
 
 local function HideAllPanels()
 
+    -- Garante que o slider nunca continue ativo
+    StopStretchDragging()
+
     Main.Visible = false
     BoostPanel.Visible = false
     StretchPanel.Visible = false
     SkyPanel.Visible = false
     HDPanel.Visible = false
-
 end
 
 local function ShowMain()
 
     HideAllPanels()
     Main.Visible = true
-
 end
 
 local function ShowBoost()
 
     HideAllPanels()
     BoostPanel.Visible = true
-
 end
 
 local function ShowStretch()
 
     HideAllPanels()
     StretchPanel.Visible = true
-
 end
 
 local function ShowSky()
 
     HideAllPanels()
     SkyPanel.Visible = true
-
 end
 
 local function ShowHD()
 
     HideAllPanels()
     HDPanel.Visible = true
-
 end
 
 local function CloseMenu()
@@ -4627,7 +4670,6 @@ local function CloseMenu()
 
     HUD.Visible = true
     OpenButton.Visible = true
-
 end
 
 local function OpenMenu()
@@ -4638,7 +4680,6 @@ local function OpenMenu()
 
     HUD.Visible = false
     OpenButton.Visible = false
-
 end
 
 FPSBoostButton.Activated:Connect(ShowBoost)
@@ -4664,6 +4705,7 @@ local function MakeDraggable(
 )
 
     local dragging = false
+    local dragInput = nil
     local dragStart
     local startPosition
 
@@ -4676,15 +4718,14 @@ local function MakeDraggable(
                 Enum.UserInputType.MouseButton1 then
 
                 dragging = true
+                dragInput = input
 
                 dragStart =
                     input.Position
 
                 startPosition =
                     object.Position
-
             end
-
         end
     )
 
@@ -4695,38 +4736,49 @@ local function MakeDraggable(
                 return
             end
 
-            if input.UserInputType ==
-                Enum.UserInputType.Touch
-                or input.UserInputType ==
+            if dragInput
+            and dragInput.UserInputType ==
+                Enum.UserInputType.Touch then
+
+                if input ~= dragInput then
+                    return
+                end
+
+            elseif input.UserInputType ~=
                 Enum.UserInputType.MouseMovement then
 
-                local delta =
-                    input.Position
-                    - dragStart
-
-                object.Position =
-                    UDim2.fromOffset(
-                        startPosition.X.Offset
-                        + delta.X,
-
-                        startPosition.Y.Offset
-                        + delta.Y
-                    )
-
+                return
             end
 
+            local delta =
+                input.Position
+                - dragStart
+
+            object.Position =
+                UDim2.fromOffset(
+                    startPosition.X.Offset
+                    + delta.X,
+
+                    startPosition.Y.Offset
+                    + delta.Y
+                )
         end
     )
 
     UserInputService.InputEnded:Connect(
         function(input)
 
-            if input.UserInputType ==
-                Enum.UserInputType.Touch
-                or input.UserInputType ==
-                Enum.UserInputType.MouseButton1 then
+            if input == dragInput
+            or (
+                dragInput
+                and dragInput.UserInputType ==
+                    Enum.UserInputType.MouseButton1
+                and input.UserInputType ==
+                    Enum.UserInputType.MouseButton1
+            ) then
 
                 dragging = false
+                dragInput = nil
 
                 if object == HUD then
 
@@ -4737,11 +4789,8 @@ local function MakeDraggable(
                         HUD.Position.Y.Offset
 
                     SaveSettings()
-
                 end
-
             end
-
         end
     )
 end
@@ -4787,14 +4836,11 @@ RunService.RenderStepped:Connect(
                             fps + 0.5
                         )
                     )
-
             end
 
             FPSFrames = 0
             FPSAccumulator = 0
-
         end
-
     end
 )
 
@@ -4844,15 +4890,10 @@ local function GetPing()
                             math.floor(
                                 number + 0.5
                             )
-
                     end
-
                 end
-
             end
-
         end
-
     end)
 
     return ping
@@ -4877,13 +4918,10 @@ task.spawn(
 
                 MSLabel.Text =
                     "MS: --"
-
             end
 
             task.wait(1)
-
         end
-
     end
 )
 
@@ -4911,21 +4949,16 @@ local function RestoreSelectedSky()
                             SkyStatus.Text =
                                 message
                         end
-
                     end
                 )
-
             end)
 
             break
         end
-
     end
 end
 
-local function SetupCharacter(
-    character
-)
+local function SetupCharacter(character)
 
     DisconnectList(
         CharacterConnections
@@ -4947,11 +4980,8 @@ local function SetupCharacter(
                     ApplyPerformanceObject(
                         object
                     )
-
                 end
-
             end)
-
         end
     )
 
@@ -4965,10 +4995,8 @@ local function SetupCharacter(
                         ApplyPerformanceObject(
                             object
                         )
-
                     end
                 )
-
             end
         )
 end
@@ -4978,7 +5006,6 @@ if LocalPlayer.Character then
     SetupCharacter(
         LocalPlayer.Character
     )
-
 end
 
 LocalPlayer.CharacterAdded:Connect(
@@ -4988,17 +5015,13 @@ LocalPlayer.CharacterAdded:Connect(
 
         SetupCharacter(character)
 
-        -- Reaplica o céu escolhido após morrer
         task.delay(
             0.7,
             function()
-
                 RestoreSelectedSky()
-
             end
         )
 
-        -- Reaplica HD Graphics
         task.delay(
             1.0,
             function()
@@ -5006,10 +5029,8 @@ LocalPlayer.CharacterAdded:Connect(
                 if SHADER_CONFIG.Enabled then
                     ApplyShaders()
                 end
-
             end
         )
-
     end
 )
 
@@ -5037,9 +5058,7 @@ OpenButton.Visible = false
 --==================================================--
 
 if StretchEnabled then
-
     SetStretchEnabled(true)
-
 end
 
 --==================================================--
@@ -5051,12 +5070,9 @@ if SHADER_CONFIG.Enabled then
     task.delay(
         0.5,
         function()
-
             ApplyShaders()
-
         end
     )
-
 end
 
 --==================================================--
@@ -5068,12 +5084,9 @@ if SkySelected then
     task.delay(
         1,
         function()
-
             RestoreSelectedSky()
-
         end
     )
-
 end
 
 --==================================================--
@@ -5091,9 +5104,7 @@ task.spawn(
             end
 
             task.wait(5)
-
         end
-
     end
 )
 
