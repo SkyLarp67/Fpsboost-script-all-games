@@ -55,6 +55,9 @@ local SHADER_CONFIG = {
     -- NOVO:
     -- Controle da iluminação do HD GRAPHICS
     LightEnabled = true,
+    -- Controla somente a cor personalizada da luz.
+    -- A cor escolhida continua salva mesmo quando estiver OFF.
+    LightColorEnabled = true,
 
     Light = {
         R = 255,
@@ -138,6 +141,32 @@ local SHADER_CONFIG = {
         ZIndex = 10
     }
 }
+
+--==================================================--
+-- DEFAULT CONFIG SNAPSHOT
+--==================================================--
+
+local function DeepCopy(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local copy = {}
+    for key, item in pairs(value) do
+        copy[key] = DeepCopy(item)
+    end
+    return copy
+end
+
+local DEFAULT_CONFIG = DeepCopy(CONFIG)
+local DEFAULT_SHADER_CONFIG = DeepCopy(SHADER_CONFIG)
+
+-- Escala escolhida pelo usuário. O ajuste automático pode reduzir
+-- temporariamente a escala efetiva para manter a interface na tela.
+local InterfaceScale = 1.00
+local InterfaceAutoFit = true
+local SavedInterfaceParts = {}
+local InterfacePartSettings = {}
 
 --==================================================--
 -- SERVICES
@@ -243,52 +272,41 @@ local function RGB(r, g, b)
     )
 end
 
--- Deep copy used by REST CONFIG.
-local function DeepCopy(value, seen)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    seen = seen or {}
-    if seen[value] then
-        return seen[value]
-    end
-
-    local copy = {}
-    seen[value] = copy
-
-    for key, item in pairs(value) do
-        copy[DeepCopy(key, seen)] = DeepCopy(item, seen)
-    end
-
-    return copy
+local function Color3ToTable(color)
+    if typeof(color) ~= "Color3" then return nil end
+    return {
+        R = math.floor(color.R * 255 + 0.5),
+        G = math.floor(color.G * 255 + 0.5),
+        B = math.floor(color.B * 255 + 0.5)
+    }
 end
 
--- Immutable-at-runtime snapshots used by REST CONFIG.
-local DEFAULT_CONFIG = DeepCopy(CONFIG)
-local DEFAULT_SHADER_CONFIG = DeepCopy(SHADER_CONFIG)
+local function TableToColor3(t)
+    if type(t) ~= "table" then return nil end
+    return Color3.fromRGB(
+        math.clamp(tonumber(t.R) or 255,0,255),
+        math.clamp(tonumber(t.G) or 255,0,255),
+        math.clamp(tonumber(t.B) or 255,0,255)
+    )
+end
+
+local function GetGuiTextColor(object)
+    if not object then return nil end
+    local ok, value = pcall(function() return object.TextColor3 end)
+    return ok and value or nil
+end
 
 --==================================================--
 -- SAVE VARIABLES
---================================================--
+--==================================================--
 
 local SavedSettings = {}
-local InterfaceSettings = {}
-
--- Interface editor state.
-local InterfaceParts = {}
-local InterfacePartDefaults = {}
-local InterfacePartSettings = {}
-local SavedInterfaceParts = InterfaceSettings
-local SelectedInterfacePartID = "MAIN_BASE"
-
-local InterfaceScale = 1.00
-local InterfaceAutoFit = true
 
 local StretchEnabled = false
 local StretchValue = CONFIG.StretchDefault
 
 local SkySelected = nil
+local SkySelectedId = nil
 
 local SavedHUDPosition = {
     X = 16,
@@ -331,15 +349,6 @@ end
 
 LoadSettings()
 
--- RESTORE INTERFACE CONFIG
-pcall(function()
-    if type(SavedSettings.Interface) == "table" then
-        InterfaceSettings = SavedSettings.Interface
-    else
-        InterfaceSettings = {}
-    end
-end)
-
 --==================================================--
 -- RESTORE STRETCH
 --==================================================--
@@ -359,6 +368,10 @@ end
 --==================================================--
 -- RESTORE SKY
 --==================================================--
+
+if type(SavedSettings.SkySelectedId) == "number" then
+    SkySelectedId = math.floor(SavedSettings.SkySelectedId)
+end
 
 if type(SavedSettings.SkySelected) == "string"
 and SavedSettings.SkySelected ~= "" then
@@ -381,6 +394,30 @@ if type(SavedSettings.HUDPosition) == "table" then
 end
 
 --==================================================--
+-- RESTORE AUTO SAVE / INTERFACE
+--==================================================--
+
+if type(SavedSettings.FPSCap) == "number" then
+    CONFIG.FPSCap = math.clamp(math.floor(SavedSettings.FPSCap), 30, 1000)
+end
+
+if type(SavedSettings.AutoSave) == "boolean" then
+    CONFIG.AutoSave = SavedSettings.AutoSave
+end
+
+if type(SavedSettings.InterfaceScale) == "number" then
+    InterfaceScale = math.clamp(SavedSettings.InterfaceScale, 0.70, 1.30)
+end
+
+if type(SavedSettings.InterfaceAutoFit) == "boolean" then
+    InterfaceAutoFit = SavedSettings.InterfaceAutoFit
+end
+
+if type(SavedSettings.InterfaceParts) == "table" then
+    SavedInterfaceParts = DeepCopy(SavedSettings.InterfaceParts)
+end
+
+--==================================================--
 -- RESTORE PERFORMANCE
 --==================================================--
 
@@ -395,6 +432,10 @@ if type(SavedSettings.Performance) == "table" then
         end
     end
 end
+
+pcall(function()
+    if typeof(setfpscap) == "function" then setfpscap(CONFIG.FPSCap) end
+end)
 
 --==================================================--
 -- RESTORE HD GRAPHICS
@@ -414,6 +455,10 @@ local function RestoreShaderSettings()
 
     if type(data.LightEnabled) == "boolean" then
         SHADER_CONFIG.LightEnabled = data.LightEnabled
+    end
+
+    if type(data.LightColorEnabled) == "boolean" then
+        SHADER_CONFIG.LightColorEnabled = data.LightColorEnabled
     end
 
     if type(data.Light) == "table" then
@@ -501,9 +546,9 @@ local ScreenGui = nil
 -- SAVE SETTINGS
 --==================================================--
 
-local function SaveSettings()
+local function SaveSettings(force)
 
-    if not CONFIG.AutoSave then
+    if not force and not CONFIG.AutoSave then
         return
     end
 
@@ -529,13 +574,18 @@ local function SaveSettings()
         StretchEnabled = StretchEnabled,
 
         SkySelected = SkySelected or "",
+        SkySelectedId = SkySelectedId,
 
         HUDPosition = {
             X = hudX,
             Y = hudY
         },
 
-        Interface = InterfaceSettings or {},
+        FPSCap = CONFIG.FPSCap,
+        AutoSave = CONFIG.AutoSave,
+        InterfaceScale = InterfaceScale,
+        InterfaceAutoFit = InterfaceAutoFit,
+        InterfaceParts = DeepCopy(InterfacePartSettings),
 
         Performance = {},
 
@@ -545,6 +595,9 @@ local function SaveSettings()
 
             LightEnabled =
                 SHADER_CONFIG.LightEnabled,
+
+            LightColorEnabled =
+                SHADER_CONFIG.LightColorEnabled,
 
             Light = {
                 R = SHADER_CONFIG.Light.R,
@@ -1161,106 +1214,49 @@ local function DisconnectStretch()
     end
 end
 
-local StretchAppliedScale = 1
-local StretchAppliedCamera = nil
-
-local function GetStretchMatrix(scale)
-    return CFrame.new(
-        0, 0, 0,
-        1, 0, 0,
-        0, scale, 0,
-        0, 0, 1
-    )
-end
-
-local function GetInverseStretchMatrix(scale)
-    if not scale or scale == 0 then
-        return CFrame.new()
-    end
-
-    return CFrame.new(
-        0, 0, 0,
-        1, 0, 0,
-        0, 1 / scale, 0,
-        0, 0, 1
-    )
-end
-
 local function ApplyRealStretch()
+
     if not StretchEnabled then
         return
     end
 
-    local Camera = Workspace.CurrentCamera
+    local Camera =
+        Workspace.CurrentCamera
+
     if not Camera then
         return
     end
 
-    local scale = math.clamp(
-        tonumber(StretchValue) or CONFIG.StretchDefault,
-        CONFIG.StretchMin,
-        CONFIG.StretchMax
-    )
+    local scale =
+        math.clamp(
+            StretchValue,
+            CONFIG.StretchMin,
+            CONFIG.StretchMax
+        )
 
     pcall(function()
-        local current = Camera.CFrame
 
-        -- Remove ONLY the deformation made by the previous frame.
-        -- This prevents the CFrame from being scaled repeatedly and
-        -- eliminates the cumulative sliding/drifting effect.
-        if StretchAppliedCamera == Camera
-        and StretchAppliedScale ~= 1 then
-            current = current * GetInverseStretchMatrix(StretchAppliedScale)
-        end
-
-        Camera.CFrame = current * GetStretchMatrix(scale)
-
-        StretchAppliedCamera = Camera
-        StretchAppliedScale = scale
+        Camera.CFrame =
+            Camera.CFrame
+            * CFrame.new(
+                0,
+                0,
+                0,
+                1, 0, 0,
+                0, scale, 0,
+                0, 0, 1
+            )
     end)
-end
-
-local function RemoveRealStretch()
-    local Camera = Workspace.CurrentCamera
-
-    if not Camera then
-        StretchAppliedScale = 1
-        StretchAppliedCamera = nil
-        return
-    end
-
-    pcall(function()
-        if StretchAppliedCamera == Camera
-        and StretchAppliedScale ~= 1 then
-            Camera.CFrame =
-                Camera.CFrame
-                * GetInverseStretchMatrix(StretchAppliedScale)
-        end
-    end)
-
-    StretchAppliedScale = 1
-    StretchAppliedCamera = nil
-end
-
-local function DisconnectStretch()
-    if StretchConnection then
-        pcall(function()
-            StretchConnection:Disconnect()
-        end)
-        StretchConnection = nil
-    end
-
-    -- Important: stopping the RenderStepped connection must also
-    -- immediately undo the last screen deformation.
-    RemoveRealStretch()
 end
 
 local function SetStretchEnabled(enabled)
+
     StretchEnabled = enabled == true
 
     DisconnectStretch()
 
     if StretchEnabled then
+
         StretchConnection =
             RunService.RenderStepped:Connect(
                 ApplyRealStretch
@@ -1271,6 +1267,7 @@ local function SetStretchEnabled(enabled)
 end
 
 local function SetStretchValue(value)
+
     local number = tonumber(value)
 
     if not number then
@@ -1512,6 +1509,9 @@ local function ApplySky(
 
                 CurrentSky = newSky
                 SkySelected = skyInfo.Name
+                if type(skyInfo.Id) == "number" then
+                    SkySelectedId = skyInfo.Id
+                end
 
                 SaveSettings()
 
@@ -1571,6 +1571,8 @@ local ShaderOriginal = {
     Brightness = nil,
     Ambient = nil,
     OutdoorAmbient = nil,
+    ColorShiftTop = nil,
+    ColorShiftBottom = nil,
     EnvironmentDiffuseScale = nil,
     EnvironmentSpecularScale = nil,
     GlobalShadows = nil,
@@ -1596,6 +1598,12 @@ local function CaptureLighting()
 
     ShaderOriginal.OutdoorAmbient =
         SafeGet(Lighting, "OutdoorAmbient")
+
+    ShaderOriginal.ColorShiftTop =
+        SafeGet(Lighting, "ColorShift_Top")
+
+    ShaderOriginal.ColorShiftBottom =
+        SafeGet(Lighting, "ColorShift_Bottom")
 
     ShaderOriginal.EnvironmentDiffuseScale =
         SafeGet(
@@ -1688,26 +1696,47 @@ local function ApplyHDLight()
 
     if SHADER_CONFIG.LightEnabled then
 
-        -- Cor escolhida pelo usuário
-        SafeSet(
-            Lighting,
-            "Ambient",
-            RGB(
-                L.R,
-                L.G,
-                L.B
-            )
-        )
+        -- A luz continua ativa mesmo quando a COR estiver OFF.
+        -- COR OFF = usa as cores originais do Roblox, sem apagar a luz.
+        if SHADER_CONFIG.LightColorEnabled then
 
-        SafeSet(
-            Lighting,
-            "OutdoorAmbient",
-            RGB(
-                L.R,
-                L.G,
-                L.B
+            SafeSet(
+                Lighting,
+                "Ambient",
+                RGB(
+                    L.R,
+                    L.G,
+                    L.B
+                )
             )
-        )
+
+            SafeSet(
+                Lighting,
+                "OutdoorAmbient",
+                RGB(
+                    L.R,
+                    L.G,
+                    L.B
+                )
+            )
+
+        else
+
+            SafeSet(
+                Lighting,
+                "Ambient",
+                ShaderOriginal.Ambient
+                    or Color3.fromRGB(128, 128, 128)
+            )
+
+            SafeSet(
+                Lighting,
+                "OutdoorAmbient",
+                ShaderOriginal.OutdoorAmbient
+                    or Color3.fromRGB(128, 128, 128)
+            )
+
+        end
 
         SafeSet(
             Lighting,
@@ -1721,21 +1750,13 @@ local function ApplyHDLight()
         SafeSet(
             Lighting,
             "Ambient",
-            Color3.fromRGB(
-                0,
-                0,
-                0
-            )
+            Color3.fromRGB(0, 0, 0)
         )
 
         SafeSet(
             Lighting,
             "OutdoorAmbient",
-            Color3.fromRGB(
-                0,
-                0,
-                0
-            )
+            Color3.fromRGB(0, 0, 0)
         )
 
         SafeSet(
@@ -2336,6 +2357,267 @@ local Main =
 AddCorner(Main, 14)
 AddStroke(Main, 0.3)
 
+--==================================================--
+-- SETTINGS / INTERFACE PANEL
+--==================================================--
+
+local SettingsPanel =
+    Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(280, 440),
+            Position = UDim2.new(0, 18, 0.5, -195),
+            BackgroundColor3 = Color3.fromRGB(20, 20, 24),
+            BorderSizePixel = 0,
+            Visible = false,
+            Active = true,
+            ZIndex = 50
+        },
+        ScreenGui
+    )
+
+AddCorner(SettingsPanel, 14)
+AddStroke(SettingsPanel, 0.3)
+
+local SettingsTitle =
+    Create(
+        "TextLabel",
+        {
+            Size = UDim2.new(1, -20, 0, 36),
+            Position = UDim2.fromOffset(10, 8),
+            BackgroundTransparency = 1,
+            Text = "⚙️ CONFIGURAÇÕES",
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextSize = 17,
+            Font = Enum.Font.GothamBold,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 51
+        },
+        SettingsPanel
+    )
+
+local SettingsBack = MakeButton(SettingsPanel, "‹ VOLTAR", UDim2.fromOffset(75, 27), UDim2.new(1, -85, 0, 10))
+SettingsBack.ZIndex = 51
+
+local ResetConfigButton = MakeButton(SettingsPanel, "REST CONFIG", UDim2.new(1, -24, 0, 45), UDim2.fromOffset(12, 58))
+ResetConfigButton.ZIndex = 51
+
+local ModifyInterfaceButton = MakeButton(SettingsPanel, "MODIFICAR INTERFACE", UDim2.new(1, -24, 0, 45), UDim2.fromOffset(12, 111))
+ModifyInterfaceButton.ZIndex = 51
+
+local AutoSaveSettingsButton = MakeButton(SettingsPanel, "AUTO SAVE: ON", UDim2.new(1, -24, 0, 40), UDim2.fromOffset(12, 166))
+AutoSaveSettingsButton.ZIndex = 51
+
+local SaveAllSettingsButton = MakeButton(SettingsPanel, "SALVAR CONFIGURAÇÕES", UDim2.new(1, -24, 0, 40), UDim2.fromOffset(12, 212))
+SaveAllSettingsButton.ZIndex = 51
+
+local FunctionalSettingsButton = MakeButton(SettingsPanel, "AJUSTES FUNCIONAIS", UDim2.new(1, -24, 0, 40), UDim2.fromOffset(12, 258))
+FunctionalSettingsButton.ZIndex = 51
+
+local InterfaceControls =
+    Create(
+        "Frame",
+        {
+            Size = UDim2.new(1, -24, 0, 120),
+            Position = UDim2.fromOffset(12, 306),
+            BackgroundColor3 = Color3.fromRGB(28, 28, 34),
+            BorderSizePixel = 0,
+            Visible = true,
+            ZIndex = 51
+        },
+        SettingsPanel
+    )
+
+AddCorner(InterfaceControls, 10)
+
+local InterfaceSizeLabel =
+    Create(
+        "TextLabel",
+        {
+            Size = UDim2.new(1, -20, 0, 25),
+            Position = UDim2.fromOffset(10, 8),
+            BackgroundTransparency = 1,
+            Text = "TAMANHO DA GUI: 100%",
+            TextColor3 = Color3.fromRGB(235, 235, 240),
+            TextSize = 12,
+            Font = Enum.Font.GothamMedium,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 52
+        },
+        InterfaceControls
+    )
+
+local InterfaceMinus = MakeButton(InterfaceControls, "−", UDim2.fromOffset(48, 35), UDim2.fromOffset(10, 42))
+local InterfacePlus = MakeButton(InterfaceControls, "+", UDim2.fromOffset(48, 35), UDim2.fromOffset(68, 42))
+local AutoFitButton = MakeButton(InterfaceControls, "AUTO: ON", UDim2.fromOffset(100, 35), UDim2.new(1, -110, 0, 42))
+InterfaceMinus.ZIndex = 52
+InterfacePlus.ZIndex = 52
+AutoFitButton.ZIndex = 52
+
+--==================================================--
+-- INTERFACE PART EDITOR
+--==================================================--
+
+local InterfaceEditorPanel =
+    Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(340, 535),
+            Position = UDim2.new(0.5, -170, 0.5, -267),
+            BackgroundColor3 = Color3.fromRGB(20, 20, 24),
+            BorderSizePixel = 0,
+            Visible = false,
+            Active = true,
+            ZIndex = 80
+        },
+        ScreenGui
+    )
+
+AddCorner(InterfaceEditorPanel, 14)
+AddStroke(InterfaceEditorPanel, 0.3)
+
+--==================================================--
+-- EDITOR DE CORES DA INTERFACE
+--==================================================--
+
+local InterfaceColorPanel = Create("Frame", {
+    Size = UDim2.fromOffset(300, 330),
+    Position = UDim2.new(0.5, -150, 0.5, -165),
+    BackgroundColor3 = Color3.fromRGB(20,20,24),
+    BorderSizePixel = 0,
+    Visible = false,
+    Active = true,
+    ZIndex = 100
+}, ScreenGui)
+AddCorner(InterfaceColorPanel, 14)
+AddStroke(InterfaceColorPanel, 0.3)
+
+local InterfaceColorTitle = Create("TextLabel", {
+    Size = UDim2.new(1,-90,0,34), Position = UDim2.fromOffset(12,8),
+    BackgroundTransparency = 1, Text = "🎨 PERSONALIZAR CORES",
+    TextColor3 = Color3.fromRGB(255,255,255), TextSize = 16,
+    Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 101
+}, InterfaceColorPanel)
+
+local InterfaceColorBack = MakeButton(InterfaceColorPanel, "‹ VOLTAR", UDim2.fromOffset(75,27), UDim2.new(1,-87,0,10))
+InterfaceColorBack.ZIndex = 101
+
+local ColorTargetButton = MakeButton(InterfaceColorPanel, "FUNDO", UDim2.fromOffset(125,36), UDim2.fromOffset(12,55))
+ColorTargetButton.ZIndex = 101
+local TextColorTargetButton = MakeButton(InterfaceColorPanel, "TEXTO", UDim2.fromOffset(125,36), UDim2.fromOffset(150,55))
+TextColorTargetButton.ZIndex = 101
+
+local ColorPreview = Create("Frame", {
+    Size=UDim2.fromOffset(276,42), Position=UDim2.fromOffset(12,100),
+    BackgroundColor3=Color3.fromRGB(60,60,68), BorderSizePixel=0, ZIndex=101
+}, InterfaceColorPanel)
+AddCorner(ColorPreview, 8)
+
+local function ColorField(label, x)
+    local l=Create("TextLabel",{Size=UDim2.fromOffset(48,25),Position=UDim2.fromOffset(x,155),
+        BackgroundTransparency=1,Text=label,TextColor3=Color3.fromRGB(220,220,225),
+        TextSize=12,Font=Enum.Font.GothamBold,ZIndex=101},InterfaceColorPanel)
+    local b=Create("TextBox",{Size=UDim2.fromOffset(68,34),Position=UDim2.fromOffset(x,180),
+        BackgroundColor3=Color3.fromRGB(30,30,36),BorderSizePixel=0,Text="255",
+        TextColor3=Color3.fromRGB(255,255,255),TextSize=12,Font=Enum.Font.GothamMedium,
+        ClearTextOnFocus=false,ZIndex=101},InterfaceColorPanel)
+    AddCorner(b,7)
+    return b
+end
+
+local ColorRBox=ColorField("R",12)
+local ColorGBox=ColorField("G",84)
+local ColorBBox=ColorField("B",156)
+
+local ApplyPartColorButton=MakeButton(InterfaceColorPanel,"APLICAR COR",UDim2.fromOffset(124,36),UDim2.fromOffset(12,230))
+local ResetPartColorButton=MakeButton(InterfaceColorPanel,"RESET COR",UDim2.fromOffset(124,36),UDim2.fromOffset(152,230))
+ApplyPartColorButton.ZIndex=101
+ResetPartColorButton.ZIndex=101
+
+local PartColorInfo=Create("TextLabel",{Size=UDim2.new(1,-24,0,42),Position=UDim2.fromOffset(12,274),
+    BackgroundTransparency=1,Text="A cor fica salva somente para a parte selecionada.",
+    TextColor3=Color3.fromRGB(170,170,180),TextSize=10,TextWrapped=true,
+    Font=Enum.Font.GothamMedium,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=101},InterfaceColorPanel)
+
+local InterfaceEditorTitle = Create("TextLabel", {
+    Size = UDim2.new(1, -90, 0, 34),
+    Position = UDim2.fromOffset(12, 8),
+    BackgroundTransparency = 1,
+    Text = "🛠️ MODIFICAR INTERFACE",
+    TextColor3 = Color3.fromRGB(255,255,255),
+    TextSize = 16,
+    Font = Enum.Font.GothamBold,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 81
+}, InterfaceEditorPanel)
+
+local InterfaceEditorBack = MakeButton(InterfaceEditorPanel, "‹ VOLTAR", UDim2.fromOffset(75,27), UDim2.new(1,-87,0,10))
+InterfaceEditorBack.ZIndex = 81
+
+local PartIdLabel = Create("TextLabel", {
+    Size = UDim2.new(1,-24,0,22), Position = UDim2.fromOffset(12,45),
+    BackgroundTransparency = 1, Text = "PARTE SELECIONADA", TextColor3 = Color3.fromRGB(180,180,190),
+    TextSize = 11, Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 81
+}, InterfaceEditorPanel)
+
+local PartIdValue = Create("TextLabel", {
+    Size = UDim2.new(1,-24,0,28), Position = UDim2.fromOffset(12,65),
+    BackgroundColor3 = Color3.fromRGB(30,30,36), BorderSizePixel = 0, Text = "MAIN_BASE",
+    TextColor3 = Color3.fromRGB(255,255,255), TextSize = 12, Font = Enum.Font.GothamBold,
+    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 81
+}, InterfaceEditorPanel)
+AddCorner(PartIdValue, 7)
+
+local PartList = Create("ScrollingFrame", {
+    Size = UDim2.new(1,-24,0,115), Position = UDim2.fromOffset(12,100),
+    BackgroundColor3 = Color3.fromRGB(25,25,30), BorderSizePixel = 0,
+    ScrollBarThickness = 4, CanvasSize = UDim2.new(), ZIndex = 81
+}, InterfaceEditorPanel)
+AddCorner(PartList, 8)
+local PartListLayout = Create("UIListLayout", {Padding=UDim.new(0,4), SortOrder=Enum.SortOrder.LayoutOrder}, PartList)
+Create("UIPadding", {PaddingTop=UDim.new(0,5),PaddingBottom=UDim.new(0,5),PaddingLeft=UDim.new(0,5),PaddingRight=UDim.new(0,5)}, PartList)
+
+local EditorInfo = Create("TextLabel", {
+    Size = UDim2.new(1,-24,0,30), Position = UDim2.fromOffset(12,219),
+    BackgroundTransparency = 1, Text = "Edite tamanho e posição da parte escolhida.", TextColor3 = Color3.fromRGB(175,175,185),
+    TextSize = 11, Font = Enum.Font.GothamMedium, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 81
+}, InterfaceEditorPanel)
+
+local function EditorButton(text, x, y, w)
+    local b = MakeButton(InterfaceEditorPanel, text, UDim2.fromOffset(w or 70,34), UDim2.fromOffset(x,y))
+    b.ZIndex = 82
+    return b
+end
+
+local SizeXMinus = EditorButton("X −", 12, 255, 62)
+local SizeXPlus  = EditorButton("X +", 80, 255, 62)
+local SizeYMinus = EditorButton("Y −", 150, 255, 62)
+local SizeYPlus  = EditorButton("Y +", 218, 255, 62)
+
+local PosXMinus = EditorButton("← X", 12, 295, 62)
+local PosXPlus  = EditorButton("X →", 80, 295, 62)
+local PosYMinus = EditorButton("↑ Y", 150, 295, 62)
+local PosYPlus  = EditorButton("Y ↓", 218, 295, 62)
+
+local EditorValues = Create("TextLabel", {
+    Size=UDim2.new(1,-24,0,48), Position=UDim2.fromOffset(12,337), BackgroundColor3=Color3.fromRGB(28,28,34),
+    BorderSizePixel=0, Text="Tamanho: -- x --\nPosição: --, --", TextColor3=Color3.fromRGB(235,235,240), TextSize=11,
+    Font=Enum.Font.GothamMedium, TextWrapped=true, ZIndex=81
+}, InterfaceEditorPanel)
+AddCorner(EditorValues,8)
+
+local ResetPartButton = EditorButton("RESET PARTE", 12, 395, 130)
+local SavePartButton = EditorButton("SALVAR PARTE", 150, 395, 130)
+
+local EditColorsButton = EditorButton("🎨 CORES", 12, 435, 128)
+local EditorAutoClamp = EditorButton("AUTO ENQUADRAR", 148, 435, 132)
+
+local InterfaceParts = {}
+local InterfacePartDefaults = {}
+local SelectedInterfacePartID = "MAIN_BASE"
+
+local ClampInterfaceObject
+
 local Header =
     Create(
         "Frame",
@@ -2362,7 +2644,7 @@ local Title =
             Size =
                 UDim2.new(
                     1,
-                    -30,
+                    -70,
                     0,
                     32
                 ),
@@ -2394,6 +2676,28 @@ local Title =
         },
         Header
     )
+
+local SettingsButton =
+    Create(
+        "TextButton",
+        {
+            Size = UDim2.fromOffset(34, 34),
+            Position = UDim2.new(1, -43, 0, 7),
+            BackgroundColor3 = Color3.fromRGB(38, 38, 44),
+            BorderSizePixel = 0,
+            Text = "⚙️",
+            TextSize = 17,
+            Font = Enum.Font.GothamBold,
+            TextColor3 = Color3.fromRGB(235, 235, 240),
+            AutoButtonColor = true,
+            Active = true,
+            ZIndex = 20
+        },
+        Header
+    )
+
+AddCorner(SettingsButton, 9)
+AddStroke(SettingsButton, 0.45)
 
 local Subtitle =
     Create(
@@ -2630,286 +2934,6 @@ AddCorner(HDPanel, 14)
 AddStroke(HDPanel, 0.3)
 
 --==================================================--
--- SETTINGS / INTERFACE EDITOR
---==================================================--
-
-local SettingsButton =
-    Create(
-        "TextButton",
-        {
-            Size = UDim2.fromOffset(34, 34),
-            Position = UDim2.new(1, -43, 0, 7),
-            BackgroundColor3 = Color3.fromRGB(35, 35, 41),
-            BorderSizePixel = 0,
-            Text = "⚙",
-            TextColor3 = Color3.fromRGB(235, 235, 240),
-            TextSize = 18,
-            Font = Enum.Font.GothamBold,
-            AutoButtonColor = true,
-            Active = true,
-            ZIndex = 10
-        },
-        Header
-    )
-AddCorner(SettingsButton, 9)
-AddStroke(SettingsButton, 0.45)
-
-local SettingsPanel =
-    Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(310, 360),
-            Position = UDim2.new(0, 18, 0.5, -180),
-            BackgroundColor3 = Color3.fromRGB(20, 20, 24),
-            BorderSizePixel = 0,
-            Visible = false,
-            Active = true
-        },
-        ScreenGui
-    )
-AddCorner(SettingsPanel, 14)
-AddStroke(SettingsPanel, 0.3)
-
-local SettingsTitle =
-    Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -100, 0, 42),
-            Position = UDim2.fromOffset(12, 7),
-            BackgroundTransparency = 1,
-            Text = "CONFIGURAÇÕES",
-            TextColor3 = Color3.fromRGB(255, 255, 255),
-            TextSize = 17,
-            Font = Enum.Font.GothamBold,
-            TextXAlignment = Enum.TextXAlignment.Left
-        },
-        SettingsPanel
-    )
-
-local SettingsBack =
-    MakeButton(
-        SettingsPanel,
-        "‹ VOLTAR",
-        UDim2.fromOffset(78, 27),
-        UDim2.new(1, -88, 0, 10)
-    )
-
-local SettingsInfo =
-    Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -24, 0, 70),
-            Position = UDim2.fromOffset(12, 58),
-            BackgroundTransparency = 1,
-            Text = "Ajuste a escala da interface ou abra o editor para modificar tamanho e posição das partes.",
-            TextColor3 = Color3.fromRGB(175, 175, 185),
-            TextSize = 11,
-            Font = Enum.Font.GothamMedium,
-            TextWrapped = true,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Top
-        },
-        SettingsPanel
-    )
-
-local ModifyInterfaceButton =
-    MakeButton(
-        SettingsPanel,
-        "MODIFICAR INTERFACE",
-        UDim2.new(1, -24, 0, 45),
-        UDim2.fromOffset(12, 140)
-    )
-
-local ResetConfigButton =
-    MakeButton(
-        SettingsPanel,
-        "REST CONFIG",
-        UDim2.new(1, -24, 0, 45),
-        UDim2.fromOffset(12, 195)
-    )
-
-local AutoFitButton =
-    MakeButton(
-        SettingsPanel,
-        "AUTO FIT: ON",
-        UDim2.new(1, -24, 0, 40),
-        UDim2.fromOffset(12, 250)
-    )
-
-local InterfaceMinus =
-    MakeButton(
-        SettingsPanel,
-        "−",
-        UDim2.fromOffset(42, 40),
-        UDim2.fromOffset(12, 300)
-    )
-
-local InterfacePlus =
-    MakeButton(
-        SettingsPanel,
-        "+",
-        UDim2.fromOffset(42, 40),
-        UDim2.fromOffset(60, 300)
-    )
-
-local InterfaceScaleLabel =
-    Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -120, 0, 40),
-            Position = UDim2.fromOffset(112, 300),
-            BackgroundTransparency = 1,
-            Text = "ESCALA: 1.00x",
-            TextColor3 = Color3.fromRGB(220, 220, 228),
-            TextSize = 11,
-            Font = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Left
-        },
-        SettingsPanel
-    )
-
-local InterfaceEditorPanel =
-    Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(320, 500),
-            Position = UDim2.new(0, 18, 0.5, -250),
-            BackgroundColor3 = Color3.fromRGB(20, 20, 24),
-            BorderSizePixel = 0,
-            Visible = false,
-            Active = true
-        },
-        ScreenGui
-    )
-AddCorner(InterfaceEditorPanel, 14)
-AddStroke(InterfaceEditorPanel, 0.3)
-
-local InterfaceEditorTitle =
-    Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -100, 0, 42),
-            Position = UDim2.fromOffset(12, 7),
-            BackgroundTransparency = 1,
-            Text = "MODIFICAR INTERFACE",
-            TextColor3 = Color3.fromRGB(255, 255, 255),
-            TextSize = 16,
-            Font = Enum.Font.GothamBold,
-            TextXAlignment = Enum.TextXAlignment.Left
-        },
-        InterfaceEditorPanel
-    )
-
-local InterfaceEditorBack =
-    MakeButton(
-        InterfaceEditorPanel,
-        "‹ VOLTAR",
-        UDim2.fromOffset(78, 27),
-        UDim2.new(1, -88, 0, 10)
-    )
-
-local PartIdValue =
-    Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -24, 0, 30),
-            Position = UDim2.fromOffset(12, 50),
-            BackgroundColor3 = Color3.fromRGB(31, 31, 37),
-            BorderSizePixel = 0,
-            Text = SelectedInterfacePartID,
-            TextColor3 = Color3.fromRGB(235, 235, 240),
-            TextSize = 10,
-            Font = Enum.Font.GothamBold,
-            TextXAlignment = Enum.TextXAlignment.Left
-        },
-        InterfaceEditorPanel
-    )
-AddCorner(PartIdValue, 7)
-
-local PartList =
-    Create(
-        "ScrollingFrame",
-        {
-            Size = UDim2.new(1, -24, 0, 180),
-            Position = UDim2.fromOffset(12, 86),
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            ScrollBarThickness = 3,
-            CanvasSize = UDim2.new(0, 0, 0, 0)
-        },
-        InterfaceEditorPanel
-    )
-
-local PartListLayout =
-    Create(
-        "UIListLayout",
-        {
-            Padding = UDim.new(0, 4),
-            SortOrder = Enum.SortOrder.LayoutOrder
-        },
-        PartList
-    )
-
-local EditorValues =
-    Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -24, 0, 45),
-            Position = UDim2.fromOffset(12, 274),
-            BackgroundTransparency = 1,
-            Text = "Tamanho: --\nPosição: --",
-            TextColor3 = Color3.fromRGB(190, 190, 200),
-            TextSize = 10,
-            Font = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Left
-        },
-        InterfaceEditorPanel
-    )
-
-local function EditorButton(text, x, y)
-    return MakeButton(
-        InterfaceEditorPanel,
-        text,
-        UDim2.fromOffset(42, 32),
-        UDim2.fromOffset(x, y)
-    )
-end
-
-local SizeXMinus = EditorButton("W−", 12, 325)
-local SizeXPlus  = EditorButton("W+", 60, 325)
-local SizeYMinus = EditorButton("H−", 108, 325)
-local SizeYPlus  = EditorButton("H+", 156, 325)
-local PosXMinus  = EditorButton("X−", 204, 325)
-local PosXPlus   = EditorButton("X+", 252, 325)
-
-local PosYMinus = EditorButton("Y−", 12, 365)
-local PosYPlus  = EditorButton("Y+", 60, 365)
-
-local ResetPartButton =
-    MakeButton(
-        InterfaceEditorPanel,
-        "RESET PARTE",
-        UDim2.fromOffset(125, 38),
-        UDim2.fromOffset(108, 365)
-    )
-
-local SavePartButton =
-    MakeButton(
-        InterfaceEditorPanel,
-        "SALVAR PARTE",
-        UDim2.fromOffset(125, 38),
-        UDim2.fromOffset(108, 410)
-    )
-
-local EditorAutoClamp =
-    MakeButton(
-        InterfaceEditorPanel,
-        "AJUSTAR NA TELA",
-        UDim2.fromOffset(125, 38),
-        UDim2.fromOffset(238, 365)
-    )
-
---==================================================--
 -- BOOST
 --==================================================--
 
@@ -3100,4 +3124,3833 @@ local function CreateToggle(
 
             TextSize = 11,
 
-      
+            Font =
+                Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        row
+    )
+
+    local state =
+        Create(
+            "TextLabel",
+            {
+                Size =
+                    UDim2.fromOffset(
+                        48,
+                        23
+                    ),
+
+                Position =
+                    UDim2.new(
+                        1,
+                        -56,
+                        0.5,
+                        -11
+                    ),
+
+                TextSize = 9,
+
+                Font =
+                    Enum.Font.GothamBold
+            },
+            row
+        )
+
+    AddCorner(state, 6)
+
+    local function Refresh()
+
+        local enabled =
+            CONFIG.Performance[option]
+
+        if enabled then
+
+            state.Text = "ON"
+
+            state.BackgroundColor3 =
+                Color3.fromRGB(
+                    65,
+                    120,
+                    80
+                )
+
+            state.TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                )
+
+        else
+
+            state.Text = "OFF"
+
+            state.BackgroundColor3 =
+                Color3.fromRGB(
+                    60,
+                    60,
+                    68
+                )
+
+            state.TextColor3 =
+                Color3.fromRGB(
+                    185,
+                    185,
+                    190
+                )
+        end
+    end
+
+    row.Activated:Connect(function()
+
+        SetPerformanceOption(
+            option,
+            not CONFIG.Performance[option]
+        )
+
+        Refresh()
+    end)
+
+    Refresh()
+
+    return row
+end
+
+local Options = {
+    {"No Camera Effects", "NoCameraEffects"},
+    {"No Clothes", "NoClothes"},
+    {"Low Water Graphics", "LowWaterGraphics"},
+    {"No Shadows", "NoShadows"},
+    {"Low Rendering", "LowRendering"},
+    {"Low Quality Parts", "LowQualityParts"},
+    {"Low Quality Models", "LowQualityModels"},
+    {"Reset Materials", "ResetMaterials"},
+    {"Remove Particles", "RemoveParticles"},
+    {"Remove Lights", "RemoveLights"},
+    {"REMOVER NUVENS", "RemoveClouds"}
+}
+
+for index, option in ipairs(Options) do
+
+    CreateToggle(
+        BoostList,
+        option[1],
+        option[2],
+        index
+    )
+end
+
+--==================================================--
+-- STRETCH PANEL
+--==================================================--
+
+local StretchTitle =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -20,
+                    0,
+                    38
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    10
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "STRETCHER",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 17,
+
+            Font =
+                Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        StretchPanel
+    )
+
+local StretchBack =
+    MakeButton(
+        StretchPanel,
+        "‹ VOLTAR",
+        UDim2.fromOffset(75, 27),
+        UDim2.new(1, -85, 0, 12)
+    )
+
+local StretchToggle =
+    MakeButton(
+        StretchPanel,
+
+        StretchEnabled
+        and "STRETCH SCREEN: ON"
+        or "STRETCH SCREEN: OFF",
+
+        UDim2.new(1, -30, 0, 42),
+
+        UDim2.fromOffset(15, 60)
+    )
+
+local StretchLabel =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    25
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    108
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "STRETCH",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    170,
+                    170,
+                    180
+                ),
+
+            TextSize = 10,
+
+            Font =
+                Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        StretchPanel
+    )
+
+--==================================================--
+-- STRETCH SLIDER
+--==================================================--
+
+local StretchSlider =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    8
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    136
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    50,
+                    50,
+                    58
+                ),
+
+            BorderSizePixel = 0,
+
+            Active = true
+        },
+        StretchPanel
+    )
+
+AddCorner(StretchSlider, 4)
+
+local StretchFill =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.fromScale(0.5, 1),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    100,
+                    130,
+                    190
+                ),
+
+            BorderSizePixel = 0,
+
+            Active = false
+        },
+        StretchSlider
+    )
+
+AddCorner(StretchFill, 4)
+
+local StretchKnob =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.fromOffset(
+                    16,
+                    16
+                ),
+
+            Position =
+                UDim2.new(
+                    0.5,
+                    -8,
+                    0.5,
+                    -8
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    235,
+                    235,
+                    240
+                ),
+
+            BorderSizePixel = 0,
+
+            Active = false
+        },
+        StretchSlider
+    )
+
+AddCorner(StretchKnob, 8)
+
+local StretchBox =
+    Create(
+        "TextBox",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    40
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    158
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    32,
+                    32,
+                    38
+                ),
+
+            BorderSizePixel = 0,
+
+            Text =
+                string.format(
+                    "%.2f",
+                    StretchValue
+                ),
+
+            PlaceholderText = "0.75",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    245,
+                    245,
+                    250
+                ),
+
+            TextSize = 14,
+
+            Font =
+                Enum.Font.GothamMedium,
+
+            ClearTextOnFocus = false
+        },
+        StretchPanel
+    )
+
+AddCorner(StretchBox, 8)
+AddStroke(StretchBox, 0.55)
+
+local StretchInfo =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -30,
+                    0,
+                    45
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    15,
+                    207
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text =
+                "0.30 = menor   •   1.00 = normal   •   2.00 = máximo",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    125,
+                    125,
+                    135
+                ),
+
+            TextSize = 9,
+
+            Font =
+                Enum.Font.Gotham,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        StretchPanel
+    )
+
+local function RefreshStretchSlider()
+
+    local alpha =
+        (
+            StretchValue
+            - CONFIG.StretchMin
+        )
+        /
+        (
+            CONFIG.StretchMax
+            - CONFIG.StretchMin
+        )
+
+    alpha =
+        math.clamp(
+            alpha,
+            0,
+            1
+        )
+
+    StretchFill.Size =
+        UDim2.new(
+            alpha,
+            0,
+            1,
+            0
+        )
+
+    StretchKnob.Position =
+        UDim2.new(
+            alpha,
+            -8,
+            0.5,
+            -8
+        )
+
+    StretchBox.Text =
+        string.format(
+            "%.2f",
+            StretchValue
+        )
+end
+
+local function SetStretchFromSlider(
+    inputX
+)
+
+    local left =
+        StretchSlider.AbsolutePosition.X
+
+    local width =
+        StretchSlider.AbsoluteSize.X
+
+    if width <= 0 then
+        return
+    end
+
+    local alpha =
+        math.clamp(
+            (inputX - left) / width,
+            0,
+            1
+        )
+
+    local value =
+        CONFIG.StretchMin
+        +
+        (
+            CONFIG.StretchMax
+            - CONFIG.StretchMin
+        )
+        * alpha
+
+    SetStretchValue(value)
+
+    RefreshStretchSlider()
+end
+
+--==================================================--
+-- STRETCH TOUCH CORRIGIDO
+--==================================================--
+
+StretchSlider.InputBegan:Connect(
+    function(input)
+
+        if input.UserInputType ==
+            Enum.UserInputType.Touch
+            or input.UserInputType ==
+            Enum.UserInputType.MouseButton1 then
+
+            StretchDragging = true
+            StretchDragInput = input
+
+            SetStretchFromSlider(
+                input.Position.X
+            )
+        end
+    end
+)
+
+UserInputService.InputChanged:Connect(
+    function(input)
+
+        if not StretchDragging then
+            return
+        end
+
+        if not StretchSlider.Visible then
+            StopStretchDragging()
+            return
+        end
+
+        -- TOUCH:
+        -- somente o mesmo dedo que iniciou o slider
+        if StretchDragInput
+        and StretchDragInput.UserInputType ==
+            Enum.UserInputType.Touch then
+
+            if input ~= StretchDragInput then
+                return
+            end
+
+            SetStretchFromSlider(
+                input.Position.X
+            )
+
+            return
+        end
+
+        -- MOUSE:
+        if StretchDragInput
+        and StretchDragInput.UserInputType ==
+            Enum.UserInputType.MouseButton1 then
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseMovement then
+
+                SetStretchFromSlider(
+                    input.Position.X
+                )
+            end
+        end
+    end
+)
+
+UserInputService.InputEnded:Connect(
+    function(input)
+
+        if input == StretchDragInput
+        or (
+            StretchDragInput
+            and StretchDragInput.UserInputType ==
+                Enum.UserInputType.MouseButton1
+            and input.UserInputType ==
+                Enum.UserInputType.MouseButton1
+        ) then
+
+            StopStretchDragging()
+        end
+    end
+)
+
+StretchBox.Focused:Connect(function()
+    StopStretchDragging()
+end)
+
+StretchBox.FocusLost:Connect(
+    function()
+
+        StopStretchDragging()
+
+        if SetStretchValue(
+            StretchBox.Text
+        ) then
+
+            RefreshStretchSlider()
+
+        else
+
+            RefreshStretchSlider()
+        end
+    end
+)
+
+StretchToggle.Activated:Connect(
+    function()
+
+        StopStretchDragging()
+
+        SetStretchEnabled(
+            not StretchEnabled
+        )
+
+        StretchToggle.Text =
+            StretchEnabled
+            and "STRETCH SCREEN: ON"
+            or "STRETCH SCREEN: OFF"
+    end
+)
+
+RefreshStretchSlider()
+
+--==================================================--
+-- SKY PANEL
+--==================================================--
+
+local SkyTitle =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -20,
+                    0,
+                    38
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    8
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "SKY SELECTOR",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 17,
+
+            Font =
+                Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        SkyPanel
+    )
+
+local SkyBack =
+    MakeButton(
+        SkyPanel,
+        "‹ VOLTAR",
+        UDim2.fromOffset(75, 27),
+        UDim2.new(1, -85, 0, 10)
+    )
+
+local SkyStatus =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -20,
+                    0,
+                    28
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    45
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text =
+                SkySelected
+                and "SALVO: " .. SkySelected
+                or "Selecione um céu",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    150,
+                    150,
+                    160
+                ),
+
+            TextSize = 10,
+
+            Font =
+                Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        SkyPanel
+    )
+
+local SkyListFrame =
+    Create(
+        "ScrollingFrame",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -16,
+                    1,
+                    -82
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    8,
+                    75
+                ),
+
+            BackgroundTransparency = 1,
+
+            BorderSizePixel = 0,
+
+            ScrollBarThickness = 3,
+
+            CanvasSize =
+                UDim2.new(0, 0, 0, 0),
+
+            AutomaticCanvasSize =
+                Enum.AutomaticSize.Y
+        },
+        SkyPanel
+    )
+
+Create(
+    "UIListLayout",
+    {
+        Padding =
+            UDim.new(
+                0,
+                7
+            ),
+
+        HorizontalAlignment =
+            Enum.HorizontalAlignment.Center,
+
+        SortOrder =
+            Enum.SortOrder.LayoutOrder
+    },
+    SkyListFrame
+)
+
+local function CreateSkyCard(
+    skyInfo,
+    index
+)
+
+    local card =
+        Create(
+            "TextButton",
+            {
+                Size =
+                    UDim2.new(
+                        1,
+                        -6,
+                        0,
+                        62
+                    ),
+
+                BackgroundColor3 =
+                    Color3.fromRGB(
+                        30,
+                        30,
+                        36
+                    ),
+
+                BorderSizePixel = 0,
+
+                Text = "",
+
+                LayoutOrder = index,
+
+                Active = true
+            },
+            SkyListFrame
+        )
+
+    AddCorner(card, 9)
+    AddStroke(card, 0.65)
+
+    Create(
+        "ImageLabel",
+        {
+            Size =
+                UDim2.fromOffset(
+                    82,
+                    50
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    6,
+                    6
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    45,
+                    45,
+                    55
+                ),
+
+            BorderSizePixel = 0,
+
+            Image =
+                "rbxthumb://type=Asset&id="
+                .. tostring(skyInfo.Id)
+                .. "&w=420&h=420",
+
+            ScaleType =
+                Enum.ScaleType.Crop
+        },
+        card
+    )
+
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -105,
+                    0,
+                    25
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    98,
+                    9
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text =
+                skyInfo.Name,
+
+            TextColor3 =
+                Color3.fromRGB(
+                    235,
+                    235,
+                    240
+                ),
+
+            TextSize = 11,
+
+            Font =
+                Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left,
+
+            TextTruncate =
+                Enum.TextTruncate.AtEnd
+        },
+        card
+    )
+
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -105,
+                    0,
+                    20
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    98,
+                    34
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text =
+                "ID: "
+                .. tostring(skyInfo.Id),
+
+            TextColor3 =
+                Color3.fromRGB(
+                    125,
+                    125,
+                    135
+                ),
+
+            TextSize = 9,
+
+            Font =
+                Enum.Font.Gotham,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        card
+    )
+
+    card.Activated:Connect(
+        function()
+
+            if SkyLoading then
+                return
+            end
+
+            SkyStatus.Text =
+                "CARREGANDO: "
+                .. skyInfo.Name
+
+            task.spawn(
+                function()
+
+                    ApplySky(
+                        skyInfo,
+                        function(message)
+
+                            SkyStatus.Text =
+                                message
+                        end
+                    )
+                end
+            )
+        end
+    )
+end
+
+for index, skyInfo in ipairs(SKY_LIST) do
+    CreateSkyCard(skyInfo, index)
+end
+
+--==================================================--
+-- HD GRAPHICS PANEL
+--==================================================--
+
+local HDTitle =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -20,
+                    0,
+                    38
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    8
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "HD GRAPHICS",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 17,
+
+            Font =
+                Enum.Font.GothamBold,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        HDPanel
+    )
+
+local HDBack =
+    MakeButton(
+        HDPanel,
+        "‹ VOLTAR",
+        UDim2.fromOffset(75, 27),
+        UDim2.new(1, -85, 0, 10)
+    )
+
+local HDList =
+    Create(
+        "ScrollingFrame",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -16,
+                    1,
+                    -58
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    8,
+                    52
+                ),
+
+            BackgroundTransparency = 1,
+
+            BorderSizePixel = 0,
+
+            ScrollBarThickness = 3,
+
+            CanvasSize =
+                UDim2.new(
+                    0,
+                    0,
+                    0,
+                    0
+                ),
+
+            AutomaticCanvasSize =
+                Enum.AutomaticSize.Y
+        },
+        HDPanel
+    )
+
+Create(
+    "UIListLayout",
+    {
+        Padding =
+            UDim.new(
+                0,
+                6
+            ),
+
+        HorizontalAlignment =
+            Enum.HorizontalAlignment.Center,
+
+        SortOrder =
+            Enum.SortOrder.LayoutOrder
+    },
+    HDList
+)
+
+local function CreateHDToggle(
+    text,
+    key
+)
+
+    local row =
+        Create(
+            "TextButton",
+            {
+                Size =
+                    UDim2.new(
+                        1,
+                        -20,
+                        0,
+                        34
+                    ),
+
+                BackgroundColor3 =
+                    Color3.fromRGB(
+                        31,
+                        31,
+                        37
+                    ),
+
+                BorderSizePixel = 0,
+
+                Text = ""
+            },
+            HDList
+        )
+
+    AddCorner(row, 7)
+
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -70,
+                    1,
+                    0
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    12,
+                    0
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = text,
+
+            TextColor3 =
+                Color3.fromRGB(
+                    225,
+                    225,
+                    230
+                ),
+
+            TextSize = 10,
+
+            Font =
+                Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        row
+    )
+
+    local state =
+        Create(
+            "TextLabel",
+            {
+                Size =
+                    UDim2.fromOffset(
+                        48,
+                        23
+                    ),
+
+                Position =
+                    UDim2.new(
+                        1,
+                        -56,
+                        0.5,
+                        -11
+                    ),
+
+                TextSize = 9,
+
+                Font =
+                    Enum.Font.GothamBold
+            },
+            row
+        )
+
+    AddCorner(state, 6)
+
+    local function Refresh()
+
+        if SHADER_CONFIG[key] then
+
+            state.Text = "ON"
+
+            state.BackgroundColor3 =
+                Color3.fromRGB(
+                    65,
+                    120,
+                    80
+                )
+
+        else
+
+            state.Text = "OFF"
+
+            state.BackgroundColor3 =
+                Color3.fromRGB(
+                    60,
+                    60,
+                    68
+                )
+        end
+    end
+
+    row.Activated:Connect(
+        function()
+
+            SHADER_CONFIG[key] =
+                not SHADER_CONFIG[key]
+
+            if SHADER_CONFIG.Enabled then
+                ApplyShaders()
+            end
+
+            Refresh()
+            SaveSettings()
+        end
+    )
+
+    Refresh()
+
+    return row
+end
+
+--==================================================--
+-- NOVA FUNÇÃO: TOGGLE DA LUZ
+--==================================================--
+
+local LightToggle =
+    CreateHDToggle(
+        "LUZ",
+        "LightEnabled"
+    )
+
+-- Forward declaration do picker para o botão poder ser criado antes dele.
+local OpenLightPicker
+
+-- Cor atual da luz. Declarada antes do botão para evitar referência
+-- a função ainda não inicializada durante a criação da interface.
+local function GetLightColor()
+    return RGB(
+        SHADER_CONFIG.Light.R,
+        SHADER_CONFIG.Light.G,
+        SHADER_CONFIG.Light.B
+    )
+end
+
+-- Botão de cor fica diretamente dentro do botão LUZ.
+-- Assim não ocupa uma linha separada no HD GRAPHICS.
+local LightColorButton = Create(
+    "TextButton",
+    {
+        Size = UDim2.fromOffset(34, 23),
+        Position = UDim2.new(1, -96, 0.5, -11),
+        BackgroundColor3 = GetLightColor(),
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 20,
+        Active = true
+    },
+    LightToggle
+)
+AddCorner(LightColorButton, 6)
+local LightColorStroke = AddStroke(LightColorButton, 0)
+LightColorStroke.Thickness = 1.5
+LightColorStroke.Color = Color3.fromRGB(255, 255, 255)
+
+Create(
+    "TextLabel",
+    {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = "●",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 13,
+        Font = Enum.Font.GothamBold,
+        ZIndex = 21
+    },
+    LightColorButton
+)
+
+-- Botão separado para desligar SOMENTE a cor personalizada.
+-- A cor escolhida continua salva e pode ser religada depois.
+local LightColorToggle = Create(
+    "TextButton",
+    {
+        Size = UDim2.fromOffset(34, 23),
+        Position = UDim2.new(1, -132, 0.5, -11),
+        BackgroundColor3 = Color3.fromRGB(65, 120, 80),
+        BorderSizePixel = 0,
+        Text = "COR",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 8,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = false,
+        ZIndex = 20,
+        Active = true
+    },
+    LightToggle
+)
+AddCorner(LightColorToggle, 6)
+
+local function RefreshLightColorToggle()
+    if SHADER_CONFIG.LightColorEnabled then
+        LightColorToggle.Text = "COR"
+        LightColorToggle.BackgroundColor3 = Color3.fromRGB(65, 120, 80)
+    else
+        LightColorToggle.Text = "COR OFF"
+        LightColorToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 68)
+    end
+end
+
+LightColorToggle.Activated:Connect(function()
+    SHADER_CONFIG.LightColorEnabled = not SHADER_CONFIG.LightColorEnabled
+
+    if SHADER_CONFIG.Enabled and SHADER_CONFIG.LightEnabled then
+        ApplyHDLight()
+    end
+
+    RefreshLightColorToggle()
+    SaveSettings()
+end)
+
+LightColorButton.Activated:Connect(function()
+    OpenLightPicker()
+end)
+
+RefreshLightColorToggle()
+
+--==================================================--
+--==================================================--
+-- COLOR PICKER RGB 24-BIT
+-- 16.777.216 CORES POSSÍVEIS
+-- RODA COM MARCADOR LIVRE + BRILHO
+-- SEM PRÉVIA DA LUZ
+--==================================================--
+
+local LightPicker = nil
+local LightPickerOpen = false
+
+local function RGBToHex(r, g, b)
+    return string.format(
+        "#%02X%02X%02X",
+        math.clamp(math.floor(tonumber(r) or 0), 0, 255),
+        math.clamp(math.floor(tonumber(g) or 0), 0, 255),
+        math.clamp(math.floor(tonumber(b) or 0), 0, 255)
+    )
+end
+
+local function ColorToHex(color)
+    return RGBToHex(
+        math.floor(color.R * 255 + 0.5),
+        math.floor(color.G * 255 + 0.5),
+        math.floor(color.B * 255 + 0.5)
+    )
+end
+
+local function ApplySelectedLightColor()
+    if SHADER_CONFIG.Enabled
+    and SHADER_CONFIG.LightEnabled then
+        ApplyHDLight()
+    end
+
+    SaveSettings()
+end
+
+OpenLightPicker = function()
+
+    if LightPicker then
+        LightPicker.Visible = true
+        LightPickerOpen = true
+        return
+    end
+
+    local pickerWidth = 330
+    local pickerHeight = 500
+
+    LightPicker = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(pickerWidth, pickerHeight),
+            Position = UDim2.new(0.5, -pickerWidth / 2, 0.5, -pickerHeight / 2),
+            BackgroundColor3 = Color3.fromRGB(20, 20, 25),
+            BorderSizePixel = 0,
+            ZIndex = 200,
+            Active = true,
+            Visible = true
+        },
+        ScreenGui
+    )
+
+    AddCorner(LightPicker, 14)
+    AddStroke(LightPicker, 0.25)
+
+    local title = Create(
+        "TextLabel",
+        {
+            Size = UDim2.new(1, -70, 0, 34),
+            Position = UDim2.fromOffset(12, 8),
+            BackgroundTransparency = 1,
+            Text = "COR DA LUZ",
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextSize = 15,
+            Font = Enum.Font.GothamBold,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 201
+        },
+        LightPicker
+    )
+
+    local close = Create(
+        "TextButton",
+        {
+            Size = UDim2.fromOffset(34, 30),
+            Position = UDim2.new(1, -42, 0, 8),
+            BackgroundColor3 = Color3.fromRGB(42, 42, 50),
+            BorderSizePixel = 0,
+            Text = "×",
+            TextColor3 = Color3.fromRGB(240, 240, 245),
+            TextSize = 20,
+            Font = Enum.Font.GothamBold,
+            ZIndex = 202
+        },
+        LightPicker
+    )
+    AddCorner(close, 8)
+
+    --==================================================--
+    -- RODA DE CORES
+    -- ÂNGULO = MATIZ / DISTÂNCIA DO CENTRO = SATURAÇÃO
+    -- CENTRO = SATURAÇÃO 0 (BRANCO/NEUTRO)
+    --==================================================--
+
+    local wheelSize = 310
+    local wheelRadius = 149
+
+    local wheel = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(wheelSize, wheelSize),
+            Position = UDim2.fromOffset(18, 58),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            ZIndex = 201,
+            Active = true
+        },
+        LightPicker
+    )
+
+    -- Base circular de matiz. Vários raios formam a roda de cores.
+    for i = 0, 359 do
+        local hueValue = i / 360
+
+        local ray = Create(
+            "Frame",
+            {
+                Size = UDim2.fromOffset(3, wheelRadius),
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+                AnchorPoint = Vector2.new(0.5, 1),
+                BackgroundColor3 = Color3.fromHSV(hueValue, 1, 1),
+                BorderSizePixel = 0,
+                Rotation = i,
+                ZIndex = 202,
+                Active = false
+            },
+            wheel
+        )
+    end
+
+    -- Suaviza a saturação: o centro fica branco e a cor aparece
+    -- progressivamente até a borda.
+    for i = 1, 22 do
+        local radius = wheelRadius * (i / 22)
+        local diameter = radius * 2
+        local transparency = 0.04 + ((i - 1) / 21) * 0.92
+
+        local fade = Create(
+            "Frame",
+            {
+                Size = UDim2.fromOffset(diameter, diameter),
+                Position = UDim2.new(0.5, -radius, 0.5, -radius),
+                BackgroundColor3 = Color3.new(1, 1, 1),
+                BackgroundTransparency = transparency,
+                BorderSizePixel = 0,
+                ZIndex = 203,
+                Active = false
+            },
+            wheel
+        )
+        AddCorner(fade, radius)
+    end
+
+    -- Marcador: pode ficar em QUALQUER ponto da roda, inclusive no centro.
+    local marker = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(24, 24),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+            BackgroundColor3 = GetLightColor(),
+            BorderSizePixel = 0,
+            ZIndex = 210,
+            Active = false
+        },
+        wheel
+    )
+    AddCorner(marker, 12)
+    local markerStroke = AddStroke(marker, 0)
+    markerStroke.Thickness = 3
+    markerStroke.Color = Color3.fromRGB(15, 15, 18)
+
+    local markerInner = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(10, 10),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            ZIndex = 211,
+            Active = false
+        },
+        marker
+    )
+    AddCorner(markerInner, 5)
+
+    --==================================================--
+    -- BRILHO
+    --==================================================--
+
+    local brightnessLabel = Create(
+        "TextLabel",
+        {
+            Size = UDim2.fromOffset(290, 18),
+            Position = UDim2.fromOffset(20, 360),
+            BackgroundTransparency = 1,
+            Text = "BRILHO",
+            TextColor3 = Color3.fromRGB(190, 190, 200),
+            TextSize = 10,
+            Font = Enum.Font.GothamBold,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 205
+        },
+        LightPicker
+    )
+
+    local brightness = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(330, 18),
+            Position = UDim2.fromOffset(18, 386),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            ZIndex = 205,
+            Active = true
+        },
+        LightPicker
+    )
+    AddCorner(brightness, 9)
+
+    local brightnessGradient = Create(
+        "UIGradient",
+        {
+            Rotation = 0,
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
+                ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
+            })
+        },
+        brightness
+    )
+
+    local brightnessHit = Create(
+        "TextButton",
+        {
+            Size = UDim2.fromScale(1, 1),
+            Position = UDim2.fromScale(0, 0),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false,
+            ZIndex = 206,
+            Active = true
+        },
+        brightness
+    )
+
+    local brightnessKnob = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(20, 20),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(1, 0, 0.5, 0),
+            BackgroundColor3 = GetLightColor(),
+            BorderSizePixel = 0,
+            ZIndex = 208,
+            Active = false
+        },
+        brightness
+    )
+    AddCorner(brightnessKnob, 10)
+    local brightnessStroke = AddStroke(brightnessKnob, 0)
+    brightnessStroke.Thickness = 2
+    brightnessStroke.Color = Color3.fromRGB(15, 15, 18)
+
+    local info = Create(
+        "TextLabel",
+        {
+            Size = UDim2.fromOffset(330, 20),
+            Position = UDim2.fromOffset(18, 408),
+            BackgroundTransparency = 1,
+            Text = "HEX: #FFFFFF    RGB: 255, 255, 255",
+            TextColor3 = Color3.fromRGB(220, 220, 228),
+            TextSize = 10,
+            Font = Enum.Font.GothamMedium,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 205
+        },
+        LightPicker
+    )
+
+    -- A imagem enviada pelo usuário é usada como referência visual.
+    -- O guia abaixo é desenhado nativamente no Roblox para não depender
+    -- de um asset externo; se houver um ID de decal da imagem, ele pode
+    -- substituir este guia por um ImageLabel.
+    -- Guia visual lateral inspirado na roda enviada: as cores ficam
+    -- representadas por setores contínuos ao redor da paleta.
+    local guide = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(42, 220),
+            Position = UDim2.fromOffset(375, 86),
+            BackgroundColor3 = Color3.fromRGB(35, 35, 42),
+            BorderSizePixel = 0,
+            ZIndex = 204
+        },
+        LightPicker
+    )
+    AddCorner(guide, 8)
+
+    local guideGradient = Create(
+        "UIGradient",
+        {
+            Rotation = 90,
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+                ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 0, 255)),
+                ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 0, 255)),
+                ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
+                ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 255, 0)),
+                ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 255, 0)),
+                ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0))
+            })
+        },
+        guide
+    )
+
+    local guideText = Create(
+        "TextLabel",
+        {
+            Size = UDim2.fromOffset(42, 42),
+            Position = UDim2.fromOffset(375, 42),
+            BackgroundTransparency = 1,
+            Text = "CORES",
+            TextColor3 = Color3.fromRGB(205, 205, 215),
+            TextSize = 9,
+            Font = Enum.Font.GothamBold,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            ZIndex = 205
+        },
+        LightPicker
+    )
+
+    local okButton = MakeButton(
+        LightPicker,
+        "OK",
+        UDim2.fromOffset(42, 48),
+        UDim2.fromOffset(375, 346)
+    )
+    okButton.ZIndex = 205
+    okButton.TextSize = 12
+
+    local cancelButton = MakeButton(
+        LightPicker,
+        "X",
+        UDim2.fromOffset(42, 34),
+        UDim2.fromOffset(375, 398)
+    )
+    cancelButton.ZIndex = 205
+    cancelButton.TextSize = 11
+
+    local hue, sat, val = Color3.toHSV(GetLightColor())
+
+    local function UpdateColorFromHSV(save)
+        local color = Color3.fromHSV(hue, sat, val)
+        local r = math.floor(color.R * 255 + 0.5)
+        local g = math.floor(color.G * 255 + 0.5)
+        local b = math.floor(color.B * 255 + 0.5)
+
+        SHADER_CONFIG.Light.R = r
+        SHADER_CONFIG.Light.G = g
+        SHADER_CONFIG.Light.B = b
+
+        marker.BackgroundColor3 = color
+        markerInner.BackgroundColor3 = color
+        brightnessKnob.BackgroundColor3 = color
+        if LightColorButton then
+            LightColorButton.BackgroundColor3 = color
+        end
+
+        -- Matiz + saturação: o marcador acompanha exatamente o ponto tocado.
+        local angle = hue * math.pi * 2 - math.pi / 2
+        local markerRadius = sat * (wheelRadius - 10)
+        local markerX = math.cos(angle) * markerRadius
+        local markerY = math.sin(angle) * markerRadius
+
+        if sat <= 0.001 then
+            markerX = 0
+            markerY = 0
+        end
+
+        marker.Position = UDim2.new(0.5, markerX, 0.5, markerY)
+
+        brightnessGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
+            ColorSequenceKeypoint.new(1, Color3.fromHSV(hue, sat, 1))
+        })
+
+        brightnessKnob.Position = UDim2.new(val, 0, 0.5, 0)
+
+        info.Text = string.format(
+            "HEX: %s    RGB: %d, %d, %d",
+            ColorToHex(color),
+            r,
+            g,
+            b
+        )
+
+        if save ~= false then
+            ApplySelectedLightColor()
+        end
+    end
+
+    local function SetWheelFromPosition(inputPosition)
+        local pos = wheel.AbsolutePosition
+        local size = wheel.AbsoluteSize
+        local center = pos + size / 2
+
+        local dx = inputPosition.X - center.X
+        local dy = inputPosition.Y - center.Y
+        local distance = math.sqrt(dx * dx + dy * dy)
+        local maxDistance = wheelRadius - 2
+
+        -- Limita o toque à área circular.
+        local limitedDistance = math.min(distance, maxDistance)
+
+        if distance > 0.001 then
+            local angle = math.atan2(dy, dx)
+            hue = (angle / (math.pi * 2) + 0.25) % 1
+        end
+
+        -- Distância do centro controla a saturação.
+        -- Portanto o marcador pode ser colocado no centro.
+        sat = math.clamp(limitedDistance / maxDistance, 0, 1)
+
+        UpdateColorFromHSV()
+    end
+
+    local function SetBrightnessFromPosition(inputPosition)
+        local pos = brightness.AbsolutePosition
+        local size = brightness.AbsoluteSize
+        val = math.clamp(
+            (inputPosition.X - pos.X) / size.X,
+            0,
+            1
+        )
+        UpdateColorFromHSV()
+    end
+
+    local wheelDragging = false
+    local wheelInput = nil
+    local brightnessDragging = false
+    local brightnessInput = nil
+
+    wheel.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            wheelDragging = true
+            wheelInput = input
+            SetWheelFromPosition(input.Position)
+        end
+    end)
+
+    brightnessHit.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            brightnessDragging = true
+            brightnessInput = input
+            SetBrightnessFromPosition(input.Position)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if wheelDragging then
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input == wheelInput then
+                SetWheelFromPosition(input.Position)
+            end
+        end
+
+        if brightnessDragging then
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input == brightnessInput then
+                SetBrightnessFromPosition(input.Position)
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if wheelInput and (
+            input == wheelInput
+            or (wheelInput.UserInputType == Enum.UserInputType.MouseButton1
+                and input.UserInputType == Enum.UserInputType.MouseButton1)
+        ) then
+            wheelDragging = false
+            wheelInput = nil
+        end
+
+        if brightnessInput and (
+            input == brightnessInput
+            or (brightnessInput.UserInputType == Enum.UserInputType.MouseButton1
+                and input.UserInputType == Enum.UserInputType.MouseButton1)
+        ) then
+            brightnessDragging = false
+            brightnessInput = nil
+        end
+    end)
+
+    close.Activated:Connect(function()
+        LightPicker.Visible = false
+        LightPickerOpen = false
+    end)
+
+    okButton.Activated:Connect(function()
+        LightPicker.Visible = false
+        LightPickerOpen = false
+        SaveSettings()
+    end)
+
+    cancelButton.Activated:Connect(function()
+        LightPicker.Visible = false
+        LightPickerOpen = false
+    end)
+
+    UpdateColorFromHSV(false)
+    LightPickerOpen = true
+end
+
+
+-- HD NUMERIC INPUT
+--==================================================--
+
+local function CreateHDNumber(
+    label,
+    group,
+    key,
+    min,
+    max
+)
+
+    local row =
+        Create(
+            "Frame",
+            {
+                Size =
+                    UDim2.new(
+                        1,
+                        -20,
+                        0,
+                        39
+                    ),
+
+                BackgroundColor3 =
+                    Color3.fromRGB(
+                        28,
+                        28,
+                        34
+                    ),
+
+                BorderSizePixel = 0
+            },
+            HDList
+        )
+
+    AddCorner(row, 7)
+
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    1,
+                    -105,
+                    1,
+                    0
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    10,
+                    0
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = label,
+
+            TextColor3 =
+                Color3.fromRGB(
+                    200,
+                    200,
+                    208
+                ),
+
+            TextSize = 9,
+
+            Font =
+                Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        row
+    )
+
+    local box =
+        Create(
+            "TextBox",
+            {
+                Size =
+                    UDim2.fromOffset(
+                        88,
+                        27
+                    ),
+
+                Position =
+                    UDim2.new(
+                        1,
+                        -98,
+                        0.5,
+                        -13
+                    ),
+
+                BackgroundColor3 =
+                    Color3.fromRGB(
+                        42,
+                        42,
+                        50
+                    ),
+
+                BorderSizePixel = 0,
+
+                Text =
+                    tostring(
+                        SHADER_CONFIG[group][key]
+                    ),
+
+                TextColor3 =
+                    Color3.fromRGB(
+                        245,
+                        245,
+                        250
+                    ),
+
+                TextSize = 10,
+
+                Font =
+                    Enum.Font.GothamMedium,
+
+                ClearTextOnFocus = false
+            },
+            row
+        )
+
+    AddCorner(box, 6)
+
+    box.FocusLost:Connect(
+        function()
+
+            local number =
+                tonumber(box.Text)
+
+            if number then
+
+                if min ~= nil
+                and max ~= nil then
+
+                    number =
+                        math.clamp(
+                            number,
+                            min,
+                            max
+                        )
+                end
+
+                SHADER_CONFIG[group][key] =
+                    number
+            end
+
+            box.Text =
+                tostring(
+                    SHADER_CONFIG[group][key]
+                )
+
+            if SHADER_CONFIG.Enabled then
+                ApplyShaders()
+            end
+
+            SaveSettings()
+        end
+    )
+
+    return box
+end
+
+--==================================================--
+-- SLIDERS HD GRAPHICS
+--==================================================--
+
+local function CreateHDSlider(label, group, key, min, max, decimals)
+    decimals = decimals or 2
+
+    local row = Create(
+        "Frame",
+        {
+            Size = UDim2.new(1, -20, 0, 50),
+            BackgroundColor3 = Color3.fromRGB(28, 28, 34),
+            BorderSizePixel = 0
+        },
+        HDList
+    )
+    AddCorner(row, 7)
+
+    local title = Create("TextLabel", {
+        Size = UDim2.new(1, -72, 0, 20),
+        Position = UDim2.fromOffset(10, 4),
+        BackgroundTransparency = 1,
+        Text = label,
+        TextColor3 = Color3.fromRGB(200, 200, 208),
+        TextSize = 9,
+        Font = Enum.Font.GothamMedium,
+        TextXAlignment = Enum.TextXAlignment.Left
+    }, row)
+
+    local valueLabel = Create("TextLabel", {
+        Size = UDim2.fromOffset(58, 20),
+        Position = UDim2.new(1, -66, 0, 4),
+        BackgroundTransparency = 1,
+        TextColor3 = Color3.fromRGB(245, 245, 250),
+        TextSize = 9,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Right
+    }, row)
+
+    local track = Create("Frame", {
+        Size = UDim2.new(1, -20, 0, 10),
+        Position = UDim2.fromOffset(10, 32),
+        BackgroundColor3 = Color3.fromRGB(48, 48, 56),
+        BorderSizePixel = 0,
+        Active = true
+    }, row)
+    AddCorner(track, 5)
+
+    local fill = Create("Frame", {
+        Size = UDim2.new(0, 0, 1, 0),
+        Position = UDim2.fromScale(0, 0),
+        BackgroundColor3 = Color3.fromRGB(105, 125, 220),
+        BorderSizePixel = 0,
+        Active = false
+    }, track)
+    AddCorner(fill, 5)
+
+    local knob = Create("Frame", {
+        Size = UDim2.fromOffset(18, 18),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0, 0, 0.5, 0),
+        BackgroundColor3 = Color3.fromRGB(240, 240, 245),
+        BorderSizePixel = 0,
+        Active = false
+    }, track)
+    AddCorner(knob, 9)
+    local stroke = AddStroke(knob, 0)
+    stroke.Thickness = 2
+    stroke.Color = Color3.fromRGB(20, 20, 24)
+
+    local dragging = false
+    local dragInput = nil
+
+    local function formatValue(v)
+        if decimals <= 0 then
+            return tostring(math.floor(v + 0.5))
+        end
+        return string.format("%." .. tostring(decimals) .. "f", v)
+    end
+
+    local function refresh(value)
+        local range = max - min
+        local alpha = range > 0 and math.clamp((value - min) / range, 0, 1) or 0
+        fill.Size = UDim2.new(alpha, 0, 1, 0)
+        knob.Position = UDim2.new(alpha, 0, 0.5, 0)
+        valueLabel.Text = formatValue(value)
+    end
+
+    local function setFromX(x, save)
+        local left = track.AbsolutePosition.X
+        local width = track.AbsoluteSize.X
+        if width <= 0 then return end
+        local alpha = math.clamp((x - left) / width, 0, 1)
+        local value = min + (max - min) * alpha
+        local step = 10 ^ decimals
+        value = math.round(value * step) / step
+        value = math.clamp(value, min, max)
+        SHADER_CONFIG[group][key] = value
+        refresh(value)
+        if SHADER_CONFIG.Enabled then
+            ApplyShaders()
+        end
+        if save then
+            SaveSettings()
+        end
+    end
+
+    local initial = ClampNumber(SHADER_CONFIG[group][key], min, max, min)
+    SHADER_CONFIG[group][key] = initial
+    refresh(initial)
+
+    track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragInput = input
+            setFromX(input.Position.X, false)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input == dragInput then
+            setFromX(input.Position.X, false)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if dragInput and (input == dragInput
+        or (dragInput.UserInputType == Enum.UserInputType.MouseButton1
+        and input.UserInputType == Enum.UserInputType.MouseButton1)) then
+            dragging = false
+            dragInput = nil
+            SaveSettings()
+        end
+    end)
+
+    return row
+end
+
+--==================================================--
+-- NOVOS CAMPOS RGB DA LUZ
+--==================================================--
+
+CreateHDNumber(
+    "Luz R",
+    "Light",
+    "R",
+    0,
+    255
+)
+
+CreateHDNumber(
+    "Luz G",
+    "Light",
+    "G",
+    0,
+    255
+)
+
+CreateHDNumber(
+    "Luz B",
+    "Light",
+    "B",
+    0,
+    255
+)
+
+--==================================================--
+-- BLOOM
+--==================================================--
+
+CreateHDSlider(
+    "Bloom Intensity",
+    "Bloom",
+    "Intensity",
+    0,
+    5,
+    2
+)
+
+CreateHDSlider(
+    "Bloom Size",
+    "Bloom",
+    "Size",
+    0,
+    56,
+    0
+)
+
+CreateHDSlider(
+    "Bloom Threshold",
+    "Bloom",
+    "Threshold",
+    0,
+    5,
+    2
+)
+
+CreateHDToggle(
+    "BLOOM",
+    "BloomEnabled"
+)
+
+--==================================================--
+-- BLUR
+--==================================================--
+
+CreateHDSlider(
+    "Blur Size",
+    "Blur",
+    "Size",
+    0,
+    56,
+    0
+)
+
+CreateHDToggle(
+    "BLUR",
+    "BlurEnabled"
+)
+
+--==================================================--
+-- COLOR CORRECTION
+--==================================================--
+
+CreateHDSlider(
+    "Brightness",
+    "ColorCorrection",
+    "Brightness",
+    -1,
+    1,
+    2
+)
+
+CreateHDSlider(
+    "Contrast",
+    "ColorCorrection",
+    "Contrast",
+    -2,
+    2,
+    2
+)
+
+CreateHDSlider(
+    "Saturation",
+    "ColorCorrection",
+    "Saturation",
+    -1,
+    1,
+    2
+)
+
+CreateHDSlider(
+    "Tint R",
+    "ColorCorrection",
+    "TintR",
+    0,
+    255,
+    0
+)
+
+CreateHDSlider(
+    "Tint G",
+    "ColorCorrection",
+    "TintG",
+    0,
+    255,
+    0
+)
+
+CreateHDSlider(
+    "Tint B",
+    "ColorCorrection",
+    "TintB",
+    0,
+    255,
+    0
+)
+
+CreateHDToggle(
+    "COLOR CORRECTION",
+    "ColorCorrectionEnabled"
+)
+
+--==================================================--
+-- SUN RAYS
+--==================================================--
+
+CreateHDSlider(
+    "Sun Rays Intensity",
+    "SunRays",
+    "Intensity",
+    0,
+    1,
+    3
+)
+
+CreateHDSlider(
+    "Sun Rays Spread",
+    "SunRays",
+    "Spread",
+    0,
+    1,
+    3
+)
+
+CreateHDToggle(
+    "SUN RAYS",
+    "SunRaysEnabled"
+)
+
+--==================================================--
+-- ATMOSPHERE
+--==================================================--
+
+CreateHDSlider(
+    "Atmosphere Density",
+    "Atmosphere",
+    "Density",
+    0,
+    1,
+    3
+)
+
+CreateHDSlider(
+    "Atmosphere Offset",
+    "Atmosphere",
+    "Offset",
+    -1,
+    1,
+    3
+)
+
+CreateHDSlider(
+    "Atmosphere Glare",
+    "Atmosphere",
+    "Glare",
+    0,
+    1,
+    2
+)
+
+CreateHDSlider(
+    "Atmosphere Haze",
+    "Atmosphere",
+    "Haze",
+    0,
+    10,
+    2
+)
+
+CreateHDToggle(
+    "ATMOSPHERE",
+    "AtmosphereEnabled"
+)
+
+--==================================================--
+-- LIGHTING
+--==================================================--
+
+CreateHDSlider(
+    "Lighting Brightness",
+    "Lighting",
+    "Brightness",
+    0,
+    10,
+    2
+)
+
+CreateHDSlider(
+    "Exposure",
+    "Lighting",
+    "ExposureCompensation",
+    -5,
+    5,
+    2
+)
+
+CreateHDSlider(
+    "Clock Time",
+    "Lighting",
+    "ClockTime",
+    0,
+    24,
+    2
+)
+
+CreateHDSlider(
+    "Shadow Softness",
+    "Lighting",
+    "ShadowSoftness",
+    0,
+    1,
+    2
+)
+
+--==================================================--
+-- VIGNETTE
+--==================================================--
+
+CreateHDSlider(
+    "Vignette Transparency",
+    "Vignette",
+    "ImageTransparency",
+    0,
+    1,
+    2
+)
+
+CreateHDToggle(
+    "VIGNETTE",
+    "VignetteEnabled"
+)
+
+CreateHDToggle(
+    "SHADER SKY",
+    "ShaderSkyEnabled"
+)
+
+--==================================================--
+-- HUD
+--==================================================--
+
+HUD =
+    Create(
+        "Frame",
+        {
+            Size =
+                UDim2.fromOffset(
+                    145,
+                    63
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    SavedHUDPosition.X,
+                    SavedHUDPosition.Y
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    18,
+                    18,
+                    22
+                ),
+
+            BackgroundTransparency = 0.08,
+
+            BorderSizePixel = 0,
+
+            Active = true
+        },
+        ScreenGui
+    )
+
+AddCorner(HUD, 11)
+AddStroke(HUD, 0.45)
+
+Create(
+    "TextLabel",
+    {
+        Size =
+            UDim2.new(
+                1,
+                -18,
+                0,
+                22
+            ),
+
+        Position =
+            UDim2.fromOffset(
+                9,
+                5
+            ),
+
+        BackgroundTransparency = 1,
+
+        Text = "SKYLARP",
+
+        TextColor3 =
+            Color3.fromRGB(
+                255,
+                255,
+                255
+            ),
+
+        TextSize = 12,
+
+        Font =
+            Enum.Font.GothamBold,
+
+        TextXAlignment =
+            Enum.TextXAlignment.Left
+    },
+    HUD
+)
+
+local FPSLabel =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    0.5,
+                    -8,
+                    0,
+                    24
+                ),
+
+            Position =
+                UDim2.fromOffset(
+                    9,
+                    30
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "FPS: --",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    220,
+                    220,
+                    225
+                ),
+
+            TextSize = 11,
+
+            Font =
+                Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        HUD
+    )
+
+local MSLabel =
+    Create(
+        "TextLabel",
+        {
+            Size =
+                UDim2.new(
+                    0.5,
+                    -8,
+                    0,
+                    24
+                ),
+
+            Position =
+                UDim2.new(
+                    0.5,
+                    0,
+                    0,
+                    30
+                ),
+
+            BackgroundTransparency = 1,
+
+            Text = "MS: --",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    220,
+                    220,
+                    225
+                ),
+
+            TextSize = 11,
+
+            Font =
+                Enum.Font.GothamMedium,
+
+            TextXAlignment =
+                Enum.TextXAlignment.Left
+        },
+        HUD
+    )
+
+--==================================================--
+-- OPEN BUTTON
+--==================================================--
+
+local OpenButton =
+    Create(
+        "TextButton",
+        {
+            Size =
+                UDim2.fromOffset(
+                    43,
+                    43
+                ),
+
+            Position =
+                UDim2.new(
+                    0,
+                    15,
+                    0,
+                    145
+                ),
+
+            BackgroundColor3 =
+                Color3.fromRGB(
+                    25,
+                    25,
+                    30
+                ),
+
+            BorderSizePixel = 0,
+
+            Text = "S",
+
+            TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    255,
+                    255
+                ),
+
+            TextSize = 17,
+
+            Font =
+                Enum.Font.GothamBold,
+
+            Active = true,
+
+            Visible = false
+        },
+        ScreenGui
+    )
+
+AddCorner(OpenButton, 22)
+AddStroke(OpenButton, 0.3)
+
+--==================================================--
+-- MAIN BUTTONS
+--==================================================--
+
+local FPSBoostButton =
+    MakeButton(
+        MainContent,
+        "FPS BOOST",
+        UDim2.new(1, 0, 0, 50),
+        UDim2.new()
+    )
+
+local StretcherButton =
+    MakeButton(
+        MainContent,
+        "STRETCHER",
+        UDim2.new(1, 0, 0, 50),
+        UDim2.new()
+    )
+
+local SkySelectorButton =
+    MakeButton(
+        MainContent,
+        "SKY SELECTOR",
+        UDim2.new(1, 0, 0, 50),
+        UDim2.new()
+    )
+
+local HDGraphicsButton =
+    MakeButton(
+        MainContent,
+        "HD GRAPHICS",
+        UDim2.new(1, 0, 0, 50),
+        UDim2.new()
+    )
+
+local CloseButton =
+    MakeButton(
+        MainContent,
+        "FECHAR MENU",
+        UDim2.new(1, 0, 0, 50),
+        UDim2.new()
+    )
+
+local InterfacePartsMap = {
+    MAIN_BASE = Main,
+    FPS_BOOST = FPSBoostButton,
+    STRETCHER = StretcherButton,
+    SKY_SELECTOR = SkySelectorButton,
+    HD_GRAPHICS = HDGraphicsButton,
+    CLOSE_BUTTON = CloseButton,
+    SETTINGS_BUTTON = SettingsButton,
+    FPS_PANEL = BoostPanel,
+    STRETCH_PANEL = StretchPanel,
+    SKY_PANEL = SkyPanel,
+    HD_PANEL = HDPanel,
+    SETTINGS_PANEL = SettingsPanel,
+    BOOST_PANEL = BoostPanel,
+    STRETCH_PANEL = StretchPanel,
+    SKY_PANEL = SkyPanel,
+    HD_PANEL = HDPanel,
+    HUD = HUD,
+    HUD_FPS_MS = HUD,
+    OPEN_BUTTON = OpenButton,
+    SKYLARP_TITLE = Title,
+    SUBTITLE = Subtitle,
+    STRETCH_SLIDER = StretchSlider,
+    STRETCH_TOGGLE = StretchToggle,
+    LIGHT_TOGGLE = LightToggle,
+    LIGHT_COLOR_TOGGLE = LightColorToggle,
+    BOOST_TITLE = BoostHeader,
+    STRETCH_TITLE = StretchTitle,
+    SKY_TITLE = SkyTitle,
+    HD_TITLE = HDTitle
+}
+
+for id, object in pairs(InterfacePartsMap) do
+    InterfaceParts[id] = object
+    if object then
+        InterfacePartDefaults[id] = {
+            SizeX = object.Size.X.Offset, SizeY = object.Size.Y.Offset,
+            PosX = object.Position.X.Offset, PosY = object.Position.Y.Offset,
+            BackgroundColor = Color3ToTable(object.BackgroundColor3),
+            TextColor = Color3ToTable(GetGuiTextColor(object)),
+            BackgroundTransparency = object.BackgroundTransparency
+        }
+    end
+end
+
+for id, values in pairs(SavedInterfaceParts) do
+    local obj = InterfaceParts[id]
+    if obj and type(values) == "table" then
+        if type(values.SizeX) == "number" and type(values.SizeY) == "number" then
+            obj.Size = UDim2.fromOffset(math.max(40, values.SizeX), math.max(25, values.SizeY))
+        end
+        if type(values.PosX) == "number" and type(values.PosY) == "number" then
+            obj.Position = UDim2.fromOffset(values.PosX, values.PosY)
+        end
+        local bg = TableToColor3(values.BackgroundColor)
+        local tc = TableToColor3(values.TextColor)
+        if bg and obj:IsA("GuiObject") then obj.BackgroundColor3 = bg end
+        if tc and (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then obj.TextColor3 = tc end
+        if type(values.BackgroundTransparency) == "number" then obj.BackgroundTransparency = math.clamp(values.BackgroundTransparency,0,1) end
+        InterfacePartSettings[id] = {
+            SizeX=obj.Size.X.Offset, SizeY=obj.Size.Y.Offset,
+            PosX=obj.Position.X.Offset, PosY=obj.Position.Y.Offset,
+            BackgroundColor=Color3ToTable(obj.BackgroundColor3),
+            TextColor=Color3ToTable(GetGuiTextColor(obj)),
+            BackgroundTransparency=obj.BackgroundTransparency
+        }
+    end
+end
+
+--==================================================--
+-- AJUSTES FUNCIONAIS
+--==================================================--
+
+local FunctionalSettingsPanel = Create("Frame", {
+    Size = UDim2.fromOffset(350, 555),
+    Position = UDim2.new(0.5, -175, 0.5, -277),
+    BackgroundColor3 = Color3.fromRGB(20,20,24),
+    BorderSizePixel = 0,
+    Visible = false,
+    Active = true,
+    ZIndex = 70
+}, ScreenGui)
+AddCorner(FunctionalSettingsPanel, 14)
+AddStroke(FunctionalSettingsPanel, 0.3)
+InterfaceParts["FUNCTIONAL_SETTINGS"] = FunctionalSettingsPanel
+InterfacePartDefaults["FUNCTIONAL_SETTINGS"] = {
+    SizeX=FunctionalSettingsPanel.Size.X.Offset, SizeY=FunctionalSettingsPanel.Size.Y.Offset,
+    PosX=FunctionalSettingsPanel.Position.X.Offset, PosY=FunctionalSettingsPanel.Position.Y.Offset,
+    BackgroundColor=Color3ToTable(FunctionalSettingsPanel.BackgroundColor3),
+    TextColor=Color3ToTable(GetGuiTextColor(FunctionalSettingsPanel)),
+    BackgroundTransparency=FunctionalSettingsPanel.BackgroundTransparency
+}
+if type(SavedInterfaceParts["FUNCTIONAL_SETTINGS"]) == "table" then
+    local v=SavedInterfaceParts["FUNCTIONAL_SETTINGS"]
+    if type(v.SizeX)=="number" and type(v.SizeY)=="number" then FunctionalSettingsPanel.Size=UDim2.fromOffset(math.max(40,v.SizeX),math.max(25,v.SizeY)) end
+    if type(v.PosX)=="number" and type(v.PosY)=="number" then FunctionalSettingsPanel.Position=UDim2.fromOffset(v.PosX,v.PosY) end
+    if type(v.BackgroundTransparency)=="number" then FunctionalSettingsPanel.BackgroundTransparency=math.clamp(v.BackgroundTransparency,0,1) end
+    InterfacePartSettings["FUNCTIONAL_SETTINGS"]={SizeX=FunctionalSettingsPanel.Size.X.Offset,SizeY=FunctionalSettingsPanel.Size.Y.Offset,PosX=FunctionalSettingsPanel.Position.X.Offset,PosY=FunctionalSettingsPanel.Position.Y.Offset,BackgroundColor=Color3ToTable(FunctionalSettingsPanel.BackgroundColor3),TextColor=Color3ToTable(GetGuiTextColor(FunctionalSettingsPanel)),BackgroundTransparency=FunctionalSettingsPanel.BackgroundTransparency}
+end
+
+local FunctionalTitle = Create("TextLabel", {
+    Size=UDim2.new(1,-90,0,34), Position=UDim2.fromOffset(12,8), BackgroundTransparency=1,
+    Text="⚙️ AJUSTES FUNCIONAIS", TextColor3=Color3.fromRGB(255,255,255), TextSize=16,
+    Font=Enum.Font.GothamBold, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=71
+}, FunctionalSettingsPanel)
+local FunctionalBack = MakeButton(FunctionalSettingsPanel,"‹ VOLTAR",UDim2.fromOffset(75,27),UDim2.new(1,-87,0,10))
+FunctionalBack.ZIndex=71
+
+local FunctionalTabs = Create("Frame",{Size=UDim2.new(1,-24,0,38),Position=UDim2.fromOffset(12,48),BackgroundTransparency=1,ZIndex=71},FunctionalSettingsPanel)
+local FTabPerformance=MakeButton(FunctionalTabs,"FPS",UDim2.fromOffset(76,34),UDim2.fromOffset(0,0))
+local FTabStretch=MakeButton(FunctionalTabs,"STRETCH",UDim2.fromOffset(76,34),UDim2.fromOffset(80,0))
+local FTabSky=MakeButton(FunctionalTabs,"SKY",UDim2.fromOffset(76,34),UDim2.fromOffset(160,0))
+local FTabHD=MakeButton(FunctionalTabs,"HD",UDim2.fromOffset(76,34),UDim2.fromOffset(240,0))
+for _,b in ipairs({FTabPerformance,FTabStretch,FTabSky,FTabHD}) do b.ZIndex=72 end
+
+local FunctionalContent=Create("ScrollingFrame",{Size=UDim2.new(1,-24,1,-96),Position=UDim2.fromOffset(12,90),BackgroundColor3=Color3.fromRGB(25,25,30),BorderSizePixel=0,ScrollBarThickness=4,CanvasSize=UDim2.new(),ZIndex=71},FunctionalSettingsPanel)
+AddCorner(FunctionalContent,10)
+Create("UIPadding",{PaddingTop=UDim.new(0,7),PaddingBottom=UDim.new(0,7),PaddingLeft=UDim.new(0,7),PaddingRight=UDim.new(0,7)},FunctionalContent)
+FunctionalContent.CanvasSize=UDim2.fromOffset(0,720)
+
+local FunctionalPages={}
+local function NewFunctionalPage(name)
+    local page=Create("Frame",{Size=UDim2.new(1,-2,0,700),BackgroundTransparency=1,Visible=false,ZIndex=72},FunctionalContent)
+    FunctionalPages[name]=page
+    return page
+end
+local FPPage=NewFunctionalPage("FPS")
+local FStretchPage=NewFunctionalPage("STRETCH")
+local FSkyPage=NewFunctionalPage("SKY")
+local FHDPage=NewFunctionalPage("HD")
+
+local function FLabel(parent,text,y)
+    return Create("TextLabel",{Size=UDim2.new(1,-4,0,25),Position=UDim2.fromOffset(2,y),BackgroundTransparency=1,Text=text,TextColor3=Color3.fromRGB(205,205,215),TextSize=11,Font=Enum.Font.GothamMedium,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=73},parent)
+end
+local function FToggle(parent,text,y,getter,setter)
+    local b=MakeButton(parent,text,UDim2.new(1,-4,0,34),UDim2.fromOffset(2,y)); b.ZIndex=73
+    local function refresh() b.Text=text..(getter() and ": ON" or ": OFF") end
+    b.Activated:Connect(function() setter(not getter()); refresh(); SaveSettings() end)
+    refresh(); return b
+end
+local function FInput(parent,label,y,value)
+    FLabel(parent,label,y)
+    local box=Create("TextBox",{Size=UDim2.new(1,-4,0,34),Position=UDim2.fromOffset(2,y+25),BackgroundColor3=Color3.fromRGB(30,30,36),BorderSizePixel=0,Text=tostring(value),TextColor3=Color3.fromRGB(255,255,255),TextSize=12,Font=Enum.Font.GothamMedium,ClearTextOnFocus=false,ZIndex=73},parent)
+    AddCorner(box,7); return box
+end
+
+FLabel(FPPage,"Opções de desempenho",0)
+local perfNames={
+ {"NoCameraEffects","NO CAMERA EFFECTS"},{"NoClothes","NO CLOTHES"},{"LowWaterGraphics","LOW WATER GRAPHICS"},{"NoShadows","NO SHADOWS"},{"LowRendering","LOW RENDERING"},{"LowQualityParts","LOW QUALITY PARTS"},{"LowQualityModels","LOW QUALITY MODELS"},{"ResetMaterials","RESET MATERIALS"},{"RemoveParticles","REMOVE PARTICLES"},{"RemoveLights","REMOVE LIGHTS"},{"RemoveClouds","REMOVE CLOUDS"}
+}
+for i,item in ipairs(perfNames) do
+    FToggle(FPPage,item[2],24+(i-1)*38,function() return CONFIG.Performance[item[1]] end,function(v) SetPerformanceOption(item[1],v) end)
+end
+local FPSCapBox=FInput(FPPage,"FPS CAP",24+#perfNames*38,CONFIG.FPSCap)
+local FPSCapApply=MakeButton(FPPage,"APLICAR FPS CAP",UDim2.new(1,-4,0,34),UDim2.fromOffset(2,49+#perfNames*38)); FPSCapApply.ZIndex=73
+FPSCapApply.Activated:Connect(function() local n=math.clamp(math.floor(tonumber(FPSCapBox.Text) or CONFIG.FPSCap),30,1000); CONFIG.FPSCap=n; pcall(function() if typeof(setfpscap)=="function" then setfpscap(n) end end); FPSCapBox.Text=tostring(n); SaveSettings() end)
+
+FLabel(FStretchPage,"Controle completo do STRETCHER",0)
+local StretchFunctionalToggle=FToggle(FStretchPage,"STRETCHER",24,function() return StretchEnabled end,function(v) SetStretchEnabled(v) end)
+local StretchValueBox=FInput(FStretchPage,"VALOR DO STRETCH (0.30 - 2.00)",68,StretchValue)
+local StretchApply=MakeButton(FStretchPage,"APLICAR STRETCH",UDim2.new(1,-4,0,34),UDim2.fromOffset(2,118)); StretchApply.ZIndex=73
+StretchApply.Activated:Connect(function() local n=math.clamp(tonumber(StretchValueBox.Text) or StretchValue,CONFIG.StretchMin,CONFIG.StretchMax); SetStretchValue(n); StretchValueBox.Text=string.format("%.2f",n); SaveSettings() end)
+
+FLabel(FSkyPage,"Sky por nome ou ID",0)
+local SkyNameBox=FInput(FSkyPage,"NOME DO SKY",24,SkySelected or "")
+local SkyIdBox=FInput(FSkyPage,"ID DO SKY",83,"")
+local SkyApply=MakeButton(FSkyPage,"APLICAR SKY",UDim2.new(1,-4,0,34),UDim2.fromOffset(2,142)); SkyApply.ZIndex=73
+SkyApply.Activated:Connect(function()
+    local name=SkyNameBox.Text:gsub("^%s+"," "):gsub("%s+$","")
+    local id=tonumber(SkyIdBox.Text)
+    if id then name=tostring(id) end
+    if name=="" then return end
+    SkySelected=name
+    SkySelectedId=id
+    if id then
+        ApplySky({Name="SKY ID "..tostring(id),Id=id}, function(message) if SkyStatus then SkyStatus.Text=message end end)
+    else
+        for _,info in ipairs(SKY_LIST) do
+            if info.Name == name then ApplySky(info, function(message) if SkyStatus then SkyStatus.Text=message end end); break end
+        end
+    end
+    SaveSettings()
+end)
+local SkyClear=MakeButton(FSkyPage,"REMOVER SKY PERSONALIZADO",UDim2.new(1,-4,0,34),UDim2.fromOffset(2,182)); SkyClear.ZIndex=73
+SkyClear.Activated:Connect(function() SkySelected=nil; SkySelectedId=nil; RemoveCurrentSky(); SaveSettings() end)
+
+FLabel(FHDPage,"Controles HD GRAPHICS",0)
+local hdToggles={
+ {"ShaderEnabled","SHADER",function() return SHADER_CONFIG.Enabled end,function(v) SetShaderEnabled(v) end},
+ {"BloomEnabled","BLOOM",function() return SHADER_CONFIG.BloomEnabled end,function(v) SHADER_CONFIG.BloomEnabled=v; ApplyShaders(); SaveSettings() end},
+ {"BlurEnabled","BLUR",function() return SHADER_CONFIG.BlurEnabled end,function(v) SHADER_CONFIG.BlurEnabled=v; ApplyShaders(); SaveSettings() end},
+ {"ColorCorrectionEnabled","COLOR CORRECTION",function() return SHADER_CONFIG.ColorCorrectionEnabled end,function(v) SHADER_CONFIG.ColorCorrectionEnabled=v; ApplyShaders(); SaveSettings() end},
+ {"SunRaysEnabled","SUN RAYS",function() return SHADER_CONFIG.SunRaysEnabled end,function(v) SHADER_CONFIG.SunRaysEnabled=v; ApplyShaders(); SaveSettings() end},
+ {"AtmosphereEnabled","ATMOSPHERE",function() return SHADER_CONFIG.AtmosphereEnabled end,function(v) SHADER_CONFIG.AtmosphereEnabled=v; ApplyShaders(); SaveSettings() end},
+ {"ShaderSkyEnabled","SHADER SKY",function() return SHADER_CONFIG.ShaderSkyEnabled end,function(v) SHADER_CONFIG.ShaderSkyEnabled=v; ApplyShaders(); SaveSettings() end},
+ {"VignetteEnabled","VIGNETTE",function() return SHADER_CONFIG.VignetteEnabled end,function(v) SHADER_CONFIG.VignetteEnabled=v; ApplyShaders(); SaveSettings() end},
+ {"LightEnabled","LUZ",function() return SHADER_CONFIG.LightEnabled end,function(v) SHADER_CONFIG.LightEnabled=v; ApplyShaders(); SaveSettings() end},
+ {"LightColorEnabled","COR DA LUZ",function() return SHADER_CONFIG.LightColorEnabled end,function(v) SHADER_CONFIG.LightColorEnabled=v; ApplyShaders(); SaveSettings() end}
+}
+for i,item in ipairs(hdToggles) do FToggle(FHDPage,item[2],24+(i-1)*38,item[3],item[4]) end
+local BrightBox=FInput(FHDPage,"BRILHO",24+#hdToggles*38,SHADER_CONFIG.Lighting.Brightness)
+local ClockBox=FInput(FHDPage,"CLOCK TIME",83+#hdToggles*38,SHADER_CONFIG.Lighting.ClockTime)
+local ExposureBox=FInput(FHDPage,"EXPOSURE",142+#hdToggles*38,SHADER_CONFIG.Lighting.ExposureCompensation)
+local BloomBox=FInput(FHDPage,"BLOOM INTENSITY",201+#hdToggles*38,SHADER_CONFIG.Bloom.Intensity)
+local LightRBox=FInput(FHDPage,"LUZ R",260+#hdToggles*38,SHADER_CONFIG.Light.R)
+local LightGBox=FInput(FHDPage,"LUZ G",319+#hdToggles*38,SHADER_CONFIG.Light.G)
+local LightBBox=FInput(FHDPage,"LUZ B",378+#hdToggles*38,SHADER_CONFIG.Light.B)
+local ApplyHDValues=MakeButton(FHDPage,"APLICAR VALORES HD",UDim2.new(1,-4,0,34),UDim2.fromOffset(2,437+#hdToggles*38)); ApplyHDValues.ZIndex=73
+ApplyHDValues.Activated:Connect(function()
+    SHADER_CONFIG.Lighting.Brightness=tonumber(BrightBox.Text) or SHADER_CONFIG.Lighting.Brightness
+    SHADER_CONFIG.Lighting.ClockTime=math.clamp(tonumber(ClockBox.Text) or SHADER_CONFIG.Lighting.ClockTime,0,24)
+    SHADER_CONFIG.Lighting.ExposureCompensation=tonumber(ExposureBox.Text) or SHADER_CONFIG.Lighting.ExposureCompensation
+    SHADER_CONFIG.Bloom.Intensity=math.max(0,tonumber(BloomBox.Text) or SHADER_CONFIG.Bloom.Intensity)
+    SHADER_CONFIG.Light.R=math.clamp(tonumber(LightRBox.Text) or SHADER_CONFIG.Light.R,0,255)
+    SHADER_CONFIG.Light.G=math.clamp(tonumber(LightGBox.Text) or SHADER_CONFIG.Light.G,0,255)
+    SHADER_CONFIG.Light.B=math.clamp(tonumber(LightBBox.Text) or SHADER_CONFIG.Light.B,0,255)
+    ApplyShaders(); SaveSettings()
+end)
+
+--==================================================--
+-- NAVIGATION
+--==================================================--
+
+local function HideAllPanels()
+
+    -- Garante que o slider nunca continue ativo
+    StopStretchDragging()
+
+    Main.Visible = false
+    BoostPanel.Visible = false
+    StretchPanel.Visible = false
+    SkyPanel.Visible = false
+    HDPanel.Visible = false
+    SettingsPanel.Visible = false
+    InterfaceEditorPanel.Visible = false
+    InterfaceColorPanel.Visible = false
+    FunctionalSettingsPanel.Visible = false
+end
+
+local function ShowMain()
+
+    HideAllPanels()
+    Main.Visible = true
+end
+
+local function ShowBoost()
+
+    HideAllPanels()
+    BoostPanel.Visible = true
+end
+
+local function ShowStretch()
+
+    HideAllPanels()
+    StretchPanel.Visible = true
+end
+
+local function ShowSky()
+
+    HideAllPanels()
+    SkyPanel.Visible = true
+end
+
+local function ShowHD()
+
+    HideAllPanels()
+    HDPanel.Visible = true
+end
+
+local function ShowSettings()
+
+    HideAllPanels()
+    SettingsPanel.Visible = true
+end
+
+local function RefreshEditorList()
+    for _, child in ipairs(PartList:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    local ids = {}
+    for id in pairs(InterfaceParts) do table.insert(ids,id) end
+    table.sort(ids)
+    for i,id in ipairs(ids) do
+        local b = MakeButton(PartList, (id == SelectedInterfacePartID and "● " or "○ ") .. id, UDim2.new(1,-2,0,26), UDim2.new())
+        b.LayoutOrder=i; b.TextSize=11; b.ZIndex=82
+        b.Activated:Connect(function() SelectedInterfacePartID=id; PartIdValue.Text=id; RefreshEditorList(); end)
+    end
+    task.defer(function() PartList.CanvasSize=UDim2.fromOffset(0, PartListLayout.AbsoluteContentSize.Y+10) end)
+end
+
+local function RefreshEditorValues()
+    local obj = InterfaceParts[SelectedInterfacePartID]
+    if not obj then return end
+    EditorValues.Text = string.format("Tamanho: %d x %d\nPosição: %d, %d", obj.Size.X.Offset, obj.Size.Y.Offset, obj.Position.X.Offset, obj.Position.Y.Offset)
+end
+
+local function ShowFunctionalSettings()
+    HideAllPanels()
+    FunctionalSettingsPanel.Visible = true
+    for _,page in pairs(FunctionalPages) do page.Visible=false end
+    FPPage.Visible=true
+    FunctionalContent.CanvasPosition=Vector2.new(0,0)
+end
+
+local function ShowInterfaceEditor()
+    HideAllPanels()
+    InterfaceEditorPanel.Visible = true
+    InterfaceColorPanel.Visible = false
+    PartIdValue.Text = SelectedInterfacePartID
+    RefreshEditorList()
+    RefreshEditorValues()
+end
+
+local function CloseMenu()
+
+    HideAllPanels()
+
+    HUD.Visible = true
+    OpenButton.Visible = true
+end
+
+local function OpenMenu()
+
+    HideAllPanels()
+
+    Main.Visible = true
+
+    HUD.Visible = false
+    OpenButton.Visible = false
+end
+
+FPSBoostButton.Activated:Connect(ShowBoost)
+StretcherButton.Activated:Connect(ShowStretch)
+SkySelectorButton.Activated:Connect(ShowSky)
+HDGraphicsButton.Activated:Connect(ShowHD)
+CloseButton.Activated:Connect(CloseMenu)
+
+BoostBack.Activated:Connect(ShowMain)
+StretchBack.Activated:Connect(ShowMain)
+SkyBack.Activated:Connect(ShowMain)
+HDBack.Activated:Connect(ShowMain)
+
+OpenButton.Activated:Connect(OpenMenu)
+SettingsButton.Activated:Connect(ShowSettings)
+SettingsBack.Activated:Connect(ShowMain)
+
+--==================================================--
+-- INTERFACE SCALE / RESET CONFIG
+--==================================================--
+
+local InterfaceObjects = {
+    Main,
+    SettingsPanel,
+    BoostPanel,
+    StretchPanel,
+    SkyPanel,
+    HDPanel,
+    HUD,
+    OpenButton,
+    InterfaceEditorPanel,
+    InterfaceColorPanel
+}
+
+local InterfaceScales = {}
+for _, object in ipairs(InterfaceObjects) do
+    local scaleObject = Instance.new("UIScale")
+    scaleObject.Scale = 1
+    scaleObject.Parent = object
+    InterfaceScales[object] = scaleObject
+end
+
+local function UpdateInterfaceScale()
+
+    local viewport = Vector2.new(0, 0)
+    pcall(function()
+        viewport = Workspace.CurrentCamera.ViewportSize
+    end)
+
+    local effective = InterfaceScale
+
+    if InterfaceAutoFit and viewport.X > 0 and viewport.Y > 0 then
+        -- O maior painel é o HD Graphics (310x500).
+        local fitX = (viewport.X - 12) / 310
+        local fitY = (viewport.Y - 12) / 500
+        effective = math.min(effective, fitX, fitY)
+    end
+
+    effective = math.clamp(effective, 0.55, 1.30)
+
+    for object, scaleObject in pairs(InterfaceScales) do
+        if object and object.Parent then
+            scaleObject.Scale = effective
+        end
+    end
+
+    InterfaceSizeLabel.Text =
+        "TAMANHO DA GUI: " .. tostring(math.floor(InterfaceScale * 100 + 0.5)) .. "%"
+
+    AutoFitButton.Text = InterfaceAutoFit and "AUTO: ON" or "AUTO: OFF"
+end
+
+ClampInterfaceObject = function(object)
+
+    if not object or not object.Parent or not object.Visible then
+        return
+    end
+
+    local viewport = Vector2.new(0, 0)
+    pcall(function()
+        viewport = Workspace.CurrentCamera.ViewportSize
+    end)
+
+    if viewport.X <= 0 or viewport.Y <= 0 then
+        return
+    end
+
+    local size = object.AbsoluteSize
+    local parent = object.Parent
+
+    -- Partes dentro de outro Frame devem ficar dentro do próprio Frame.
+    if parent and parent:IsA("GuiObject") then
+        local parentSize = parent.AbsoluteSize
+        local parentScale = 1
+        local parentUIScale = parent:FindFirstChildOfClass("UIScale")
+        if parentUIScale then parentScale = math.max(0.01, parentUIScale.Scale) end
+
+        local maxX = math.max(0, (parentSize.X - size.X) / parentScale)
+        local maxY = math.max(0, (parentSize.Y - size.Y) / parentScale)
+        object.Position = UDim2.fromOffset(
+            math.clamp(object.Position.X.Offset, 0, maxX),
+            math.clamp(object.Position.Y.Offset, 0, maxY)
+        )
+        return
+    end
+
+    local maxX = math.max(0, viewport.X - size.X - 2)
+    local maxY = math.max(0, viewport.Y - size.Y - 2)
+
+    object.Position = UDim2.fromOffset(
+        math.clamp(object.Position.X.Offset, 2, maxX),
+        math.clamp(object.Position.Y.Offset, 2, maxY)
+    )
+end
+
+local function ClampAllInterface()
+    for _, object in ipairs(InterfaceObjects) do
+        ClampInterfaceObject(object)
+    end
+end
+
+local function CaptureInterfacePart(id)
+    local obj = InterfaceParts[id]
+    if not obj then return end
+    InterfacePartSettings[id] = {
+        SizeX=obj.Size.X.Offset, SizeY=obj.Size.Y.Offset,
+        PosX=obj.Position.X.Offset, PosY=obj.Position.Y.Offset,
+        BackgroundColor=Color3ToTable(obj.BackgroundColor3),
+        TextColor=Color3ToTable(GetGuiTextColor(obj)),
+        BackgroundTransparency=obj.BackgroundTransparency
+    }
+end
+
+local function CaptureAllInterfaceParts()
+    for id in pairs(InterfaceParts) do CaptureInterfacePart(id) end
+end
+
+local function ApplyEditorDelta(dx, dy, dw, dh)
+    local obj = InterfaceParts[SelectedInterfacePartID]
+    if not obj then return end
+    local minW, minH = 40, 25
+    local newW = math.max(minW, obj.Size.X.Offset + (dw or 0))
+    local newH = math.max(minH, obj.Size.Y.Offset + (dh or 0))
+    obj.Size = UDim2.fromOffset(newW, newH)
+    obj.Position = UDim2.fromOffset(obj.Position.X.Offset + (dx or 0), obj.Position.Y.Offset + (dy or 0))
+    ClampInterfaceObject(obj)
+    CaptureInterfacePart(SelectedInterfacePartID)
+    RefreshEditorValues()
+    SaveSettings()
+end
+
+SizeXMinus.Activated:Connect(function() ApplyEditorDelta(0,0,-10,0) end)
+SizeXPlus.Activated:Connect(function() ApplyEditorDelta(0,0,10,0) end)
+SizeYMinus.Activated:Connect(function() ApplyEditorDelta(0,0,0,-10) end)
+SizeYPlus.Activated:Connect(function() ApplyEditorDelta(0,0,0,10) end)
+PosXMinus.Activated:Connect(function() ApplyEditorDelta(-10,0,0,0) end)
+PosXPlus.Activated:Connect(function() ApplyEditorDelta(10,0,0,0) end)
+PosYMinus.Activated:Connect(function() ApplyEditorDelta(0,-10,0,0) end)
+PosYPlus.Activated:Connect(function() ApplyEditorDelta(0,10,0,0) end)
+
+ResetPartButton.Activated:Connect(function()
+    local obj = InterfaceParts[SelectedInterfacePartID]
+    local d = InterfacePartDefaults[SelectedInterfacePartID]
+    if obj and d then
+        obj.Size = UDim2.fromOffset(d.SizeX,d.SizeY)
+        obj.Position = UDim2.fromOffset(d.PosX,d.PosY)
+        local bg = TableToColor3(d.BackgroundColor)
+        local tc = TableToColor3(d.TextColor)
+        if bg then obj.BackgroundColor3 = bg end
+        if tc and (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then obj.TextColor3 = tc end
+        if type(d.BackgroundTransparency) == "number" then obj.BackgroundTransparency = d.BackgroundTransparency end
+        ClampInterfaceObject(obj)
+        CaptureInterfacePart(SelectedInterfacePartID)
+        RefreshEditorValues()
+        SaveSettings()
+    end
+end)
+
+SavePartButton.Activated:Connect(function()
+    local obj = InterfaceParts[SelectedInterfacePartID]
+    if obj then
+        CaptureInterfacePart(SelectedInterfacePartID)
+        SaveSettings()
+        SavePartButton.Text = "SALVO ✓"
+        task.delay(0.9,function() if SavePartButton.Parent then SavePartButton.Text="SALVAR PARTE" end end)
+    end
+end)
+
+EditorAutoClamp.Activated:Connect(function()
+    local obj = InterfaceParts[SelectedInterfacePartID]
+    if obj then ClampInterfaceObject(obj); CaptureInterfacePart(SelectedInterfacePartID); RefreshEditorValues(); SaveSettings() end
+end)
+
+local SelectedColorTarget = "Background"
+
+local function RefreshPartColorEditor()
+    local obj = InterfaceParts[SelectedInterfacePartID]
+    if not obj then return end
+    local color = obj.BackgroundColor3
+    if SelectedColorTarget == "Text" then color = GetGuiTextColor(obj) end
+    if typeof(color) ~= "Color3" then color = Color3.fromRGB(255,255,255) end
+    ColorRBox.Text = tostring(math.floor(color.R*255+0.5))
+    ColorGBox.Text = tostring(math.floor(color.G*255+0.5))
+    ColorBBox.Text = tostring(math.floor(color.B*255+0.5))
+    ColorPreview.BackgroundColor3 = color
+end
+
+local function ShowPartColorEditor()
+    HideAllPanels()
+    InterfaceColorPanel.Visible = true
+    RefreshPartColorEditor()
+end
+
+local function ReadRGBBoxes()
+    return math.clamp(math.floor(tonumber(ColorRBox.Text) or 255),0,255),
+           math.clamp(math.floor(tonumber(ColorGBox.Text) or 255),0,255),
+           math.clamp(math.floor(tonumber(ColorBBox.Text) or 255),0,255)
+end
+
+ColorTargetButton.Activated:Connect(function()
+    SelectedColorTarget = "Background"
+    RefreshPartColorEditor()
+end)
+
+TextColorTargetButton.Activated:Connect(function()
+    SelectedColorTarget = "Text"
+    RefreshPartColorEditor()
+end)
+
+ApplyPartColorButton.Activated:Connect(function()
+    local obj=InterfaceParts[SelectedInterfacePartID]
+    if not obj then return end
+    local r,g,b=ReadRGBBoxes()
+    local c=Color3.fromRGB(r,g,b)
+    if SelectedColorTarget=="Background" then
+        obj.BackgroundColor3=c
+    elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+        obj.TextColor3=c
+    end
+    CaptureInterfacePart(SelectedInterfacePartID)
+    ColorPreview.BackgroundColor3=c
+    SaveSettings()
+end)
+
+ResetPartColorButton.Activated:Connect(function()
+    local obj=InterfaceParts[SelectedInterfacePartID]
+    local d=InterfacePartDefaults[SelectedInterfacePartID]
+    if not obj or not d then return end
+    local c=SelectedColorTarget=="Background" and TableToColor3(d.BackgroundColor) or TableToColor3(d.TextColor)
+    if c then
+        if SelectedColorTarget=="Background" then obj.BackgroundColor3=c
+        elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then obj.TextColor3=c end
+    end
+    CaptureInterfacePart(SelectedInterfacePartID)
+    RefreshPartColorEditor()
+    SaveSettings()
+end)
+
+EditColorsButton.Activated:Connect(ShowPartColorEditor)
+InterfaceColorBack.Activated:Connect(ShowInterfaceEditor)
+
+InterfaceMinus.Activated:Connect(function()
+    InterfaceScale = math.clamp(InterfaceScale - 0.05, 0.70, 1.30)
+    UpdateInterfaceScale()
+    ClampAllInterface()
+    SaveSettings()
+end)
+
+InterfacePlus.Activated:Connect(function()
+    InterfaceScale = math.clamp(InterfaceScale + 0.05, 0.70, 1.30)
+    UpdateInterfaceScale()
+    ClampAllInterface()
+    SaveSettings()
+end)
+
+AutoFitButton.Activated:Connect(function()
+    InterfaceAutoFit = not InterfaceAutoFit
+    UpdateInterfaceScale()
+    ClampAllInterface()
+    SaveSettings()
+end)
+
+AutoSaveSettingsButton.Activated:Connect(function()
+    CONFIG.AutoSave = not CONFIG.AutoSave
+    AutoSaveSettingsButton.Text = CONFIG.AutoSave and "AUTO SAVE: ON" or "AUTO SAVE: OFF"
+    SaveSettings(true)
+end)
+
+SaveAllSettingsButton.Activated:Connect(function()
+    CaptureAllInterfaceParts()
+    SaveSettings(true)
+    SaveAllSettingsButton.Text = "CONFIGURAÇÕES SALVAS ✓"
+    task.delay(1.2, function()
+        if SaveAllSettingsButton and SaveAllSettingsButton.Parent then
+            SaveAllSettingsButton.Text = "SALVAR CONFIGURAÇÕES"
+        end
+    end)
+end)
+
+FunctionalSettingsButton.Activated:Connect(ShowFunctionalSettings)
+FunctionalBack.Activated:Connect(ShowSettings)
+FTabPerformance.Activated:Connect(function() for _,p in pairs(FunctionalPages) do p.Visible=false end FPPage.Visible=true end)
+FTabStretch.Activated:Connect(function() for _,p in pairs(FunctionalPages) do p.Visible=false end FStretchPage.Visible=true; StretchValueBox.Text=string.format("%.2f",StretchValue) end)
+FTabSky.Activated:Connect(function() for _,p in pairs(FunctionalPages) do p.Visible=false end FSkyPage.Visible=true; SkyNameBox.Text=SkySelected or "" end)
+FTabHD.Activated:Connect(function() for _,p in pairs(FunctionalPages) do p.Visible=false end FHDPage.Visible=true end)
+FunctionalSettingsButton.Activated:Connect(ShowFunctionalSettings)
+ModifyInterfaceButton.Activated:Connect(ShowInterfaceEditor)
+InterfaceEditorBack.Activated:Connect(ShowSettings)
+
+ResetConfigButton.Activated:Connect(function()
+
+    -- Remove o arquivo salvo e restaura os valores originais.
+    pcall(function()
+        if typeof(delfile) == "function" and isfile and isfile(CONFIG.SaveFile) then
+            delfile(CONFIG.SaveFile)
+        end
+    end)
+
+    pcall(function()
+        if SHADER_CONFIG.Enabled then
+            SetShaderEnabled(false)
+        end
+    end)
+
+    pcall(function()
+        SetStretchEnabled(false)
+    end)
+
+    RemoveCurrentSky()
+
+    CONFIG = DeepCopy(DEFAULT_CONFIG)
+    SHADER_CONFIG = DeepCopy(DEFAULT_SHADER_CONFIG)
+
+    StretchValue = CONFIG.StretchDefault
+    StretchEnabled = false
+    SkySelected = nil
+    SkySelectedId = nil
+    InterfaceScale = 1.00
+    InterfaceAutoFit = true
+    CONFIG.AutoSave = DEFAULT_CONFIG.AutoSave
+
+    for id, obj in pairs(InterfaceParts) do
+        local d = InterfacePartDefaults[id]
+        if obj and d then
+            obj.Size = UDim2.fromOffset(d.SizeX,d.SizeY)
+            obj.Position = UDim2.fromOffset(d.PosX,d.PosY)
+        end
+    end
+    InterfacePartSettings = {}
+
+    SavedHUDPosition.X = 16
+    SavedHUDPosition.Y = 80
+
+    UpdateInterfaceScale()
+    ClampAllInterface()
+    SaveSettings()
+
+    ResetConfigButton.Text = "CONFIG RESTAURADA"
+    task.delay(1.2, function()
+        if ResetConfigButton and ResetConfigButton.Parent then
+            ResetConfigButton.Text = "REST CONFIG"
+        end
+    end)
+end)
+
+UpdateInterfaceScale()
+AutoSaveSettingsButton.Text = CONFIG.AutoSave and "AUTO SAVE: ON" or "AUTO SAVE: OFF"
+
+--==================================================--
+-- DRAG MOBILE
+--==================================================--
+
+local function MakeDraggable(
+    object,
+    handle
+)
+
+    local dragging = false
+    local dragInput = nil
+    local dragStart
+    local startPosition
+
+    handle.InputBegan:Connect(
+        function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.Touch
+                or input.UserInputType ==
+                Enum.UserInputType.MouseButton1 then
+
+                dragging = true
+                dragInput = input
+
+                dragStart =
+                    input.Position
+
+                startPosition =
+                    object.Position
+            end
+        end
+    )
+
+    UserInputService.InputChanged:Connect(
+        function(input)
+
+            if not dragging then
+                return
+            end
+
+            if dragInput
+            and dragInput.UserInputType ==
+                Enum.UserInputType.Touch then
+
+                if input ~= dragInput then
+                    return
+                end
+
+            elseif input.UserInputType ~=
+                Enum.UserInputType.MouseMovement then
+
+                return
+            end
+
+            local delta =
+                input.Position
+                - dragStart
+
+            object.Position =
+                UDim2.fromOffset(
+                    startPosition.X.Offset
+                    + delta.X,
+
+                    startPosition.Y.Offset
+                    + delta.Y
+                )
+
+            ClampInterfaceObject(object)
+        end
+    )
+
+    UserInputService.InputEnded:Connect(
+        function(input)
+
+            if input == dragInput
+            or (
+                dragInput
+                and dragInput.UserInputType ==
+                    Enum.UserInputType.MouseButton1
+                and input.UserInputType ==
+                    Enum.UserInputType.MouseButton1
+            ) then
+
+                dragging = false
+                dragInput = nil
+
+                if object == HUD then
+
+                    SavedHUDPosition.X =
+                        HUD.Position.X.Offset
+
+                    SavedHUDPosition.Y =
+                        HUD.Position.Y.Offset
+
+                    SaveSettings()
+                end
+            end
+        end
+    )
+end
+
+MakeDraggable(Main, Header)
+MakeDraggable(BoostPanel, BoostHeader)
+MakeDraggable(StretchPanel, StretchTitle)
+MakeDraggable(SkyPanel, SkyTitle)
+MakeDraggable(HDPanel, HDTitle)
+MakeDraggable(SettingsPanel, SettingsTitle)
+MakeDraggable(HUD, HUD)
+
+ClampAllInterface()
+
+pcall(function()
+    Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+        UpdateInterfaceScale()
+        ClampAllInterface()
+    end)
+end)
+
+--==================================================--
+-- FPS
+--==================================================--
+
+local FPSFrames = 0
+local FPSAccumulator = 0
+
+RunService.RenderStepped:Connect(
+    function(deltaTime)
+
+        if not deltaTime
+        or deltaTime <= 0 then
+            return
+        end
+
+        FPSFrames += 1
+        FPSAccumulator += deltaTime
+
+        if FPSAccumulator >= 0.5 then
+
+            local fps =
+                FPSFrames
+                / FPSAccumulator
+
+            if fps == fps
+            and fps > 0 then
+
+                FPSLabel.Text =
+                    "FPS: "
+                    .. tostring(
+                        math.floor(
+                            fps + 0.5
+                        )
+                    )
+            end
+
+            FPSFrames = 0
+            FPSAccumulator = 0
+        end
+    end
+)
+
+--==================================================--
+-- PING
+--==================================================--
+
+local function GetPing()
+
+    local ping
+
+    pcall(function()
+
+        local networkStats =
+            Stats:FindFirstChild("Network")
+
+        if networkStats then
+
+            local serverStats =
+                networkStats:FindFirstChild(
+                    "ServerStatsItem"
+                )
+
+            if serverStats then
+
+                local dataPing =
+                    serverStats:FindFirstChild(
+                        "Data Ping"
+                    )
+
+                if dataPing then
+
+                    local valueString =
+                        dataPing:GetValueString()
+
+                    local number =
+                        tonumber(
+                            string.match(
+                                valueString,
+                                "%d+"
+                            )
+                        )
+
+                    if number then
+
+                        ping =
+                            math.floor(
+                                number + 0.5
+                            )
+                    end
+                end
+            end
+        end
+    end)
+
+    return ping
+end
+
+task.spawn(
+    function()
+
+        while ScreenGui
+        and ScreenGui.Parent do
+
+            local ping =
+                GetPing()
+
+            if ping then
+
+                MSLabel.Text =
+                    "MS: "
+                    .. tostring(ping)
+
+            else
+
+                MSLabel.Text =
+                    "MS: --"
+            end
+
+            task.wait(1)
+        end
+    end
+)
+
+--==================================================--
+-- CHARACTER / RESPAWN
+--==================================================--
+
+local function RestoreSelectedSky()
+
+    if SkySelectedId then
+        task.spawn(function()
+            ApplySky({Name=SkySelected or ("SKY ID "..tostring(SkySelectedId)),Id=SkySelectedId}, function(message)
+                if SkyStatus then SkyStatus.Text=message end
+            end)
+        end)
+        return
+    end
+
+    if not SkySelected then
+        return
+    end
+
+    for _, skyInfo in ipairs(SKY_LIST) do
+
+        if skyInfo.Name == SkySelected then
+
+            task.spawn(function()
+
+                ApplySky(
+                    skyInfo,
+                    function(message)
+
+                        if SkyStatus then
+                            SkyStatus.Text =
+                                message
+                        end
+                    end
+                )
+            end)
+
+            break
+        end
+    end
+end
+
+local function SetupCharacter(character)
+
+    DisconnectList(
+        CharacterConnections
+    )
+
+    if not character then
+        return
+    end
+
+    task.defer(
+        function()
+
+            pcall(function()
+
+                for _, object in ipairs(
+                    character:GetDescendants()
+                ) do
+
+                    ApplyPerformanceObject(
+                        object
+                    )
+                end
+            end)
+        end
+    )
+
+    CharacterConnections.DescendantAdded =
+        character.DescendantAdded:Connect(
+            function(object)
+
+                task.defer(
+                    function()
+
+                        ApplyPerformanceObject(
+                            object
+                        )
+                    end
+                )
+            end
+        )
+end
+
+if LocalPlayer.Character then
+
+    SetupCharacter(
+        LocalPlayer.Character
+    )
+end
+
+LocalPlayer.CharacterAdded:Connect(
+    function(character)
+
+        task.wait(0.2)
+
+        SetupCharacter(character)
+
+        task.delay(
+            0.7,
+            function()
+                RestoreSelectedSky()
+            end
+        )
+
+        task.delay(
+            1.0,
+            function()
+
+                if SHADER_CONFIG.Enabled then
+                    ApplyShaders()
+                end
+            end
+        )
+    end
+)
+
+--==================================================--
+-- AUTOMATIC PERFORMANCE
+--==================================================--
+
+pcall(ScanWorkspaceOnce)
+pcall(SetupPerformanceConnections)
+
+--==================================================--
+-- INITIAL GUI
+--==================================================--
+
+HideAllPanels()
+
+Main.Visible = true
+
+HUD.Visible = false
+
+OpenButton.Visible = false
+
+--==================================================--
+-- START STRETCH
+--==================================================--
+
+if StretchEnabled then
+    SetStretchEnabled(true)
+end
+
+--==================================================--
+-- INITIAL HD GRAPHICS
+--==================================================--
+
+if SHADER_CONFIG.Enabled then
+
+    task.delay(
+        0.5,
+        function()
+            ApplyShaders()
+        end
+    )
+end
+
+--==================================================--
+-- RESTORE SAVED SKY
+--==================================================--
+
+if SkySelected then
+
+    task.delay(
+        1,
+        function()
+            RestoreSelectedSky()
+        end
+    )
+end
+
+--==================================================--
+-- AUTO SAVE LOOP
+--==================================================--
+
+task.spawn(
+    function()
+
+        while ScreenGui
+        and ScreenGui.Parent do
+
+            if CONFIG.AutoSave then
+                SaveSettings()
+            end
+
+            task.wait(5)
+        end
+    end
+)
+
+--==================================================--
+-- FINAL SAVE
+--==================================================--
+
+pcall(function()
+    SaveSettings()
+end)
+
+--==================================================--
+-- SKYLARP V2 LOADED
+--==================================================--
