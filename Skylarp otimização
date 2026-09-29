@@ -9,7 +9,7 @@
 -- CONFIG
 --==================================================--
 
-CONFIG = {
+local CONFIG = {
     FPSCap = 360,
 
     StretchDefault = 0.75,
@@ -40,7 +40,7 @@ CONFIG = {
 -- HD GRAPHICS CONFIG
 --==================================================--
 
-SHADER_CONFIG = {
+local SHADER_CONFIG = {
 
     Enabled = false,
 
@@ -55,9 +55,6 @@ SHADER_CONFIG = {
     -- NOVO:
     -- Controle da iluminação do HD GRAPHICS
     LightEnabled = true,
-    -- Controla somente a cor personalizada da luz.
-    -- A cor escolhida continua salva mesmo quando estiver OFF.
-    LightColorEnabled = true,
 
     Light = {
         R = 255,
@@ -143,45 +140,20 @@ SHADER_CONFIG = {
 }
 
 --==================================================--
--- DEFAULT CONFIG SNAPSHOT
---==================================================--
-
-function DeepCopy(value)
-    if type(value) ~= "table" then
-        return value
-    end
-
-    local copy = {}
-    for key, item in pairs(value) do
-        copy[key] = DeepCopy(item)
-    end
-    return copy
-end
-
-DEFAULT_CONFIG = DeepCopy(CONFIG)
-DEFAULT_SHADER_CONFIG = DeepCopy(SHADER_CONFIG)
-
--- Escala escolhida pelo usuário. O ajuste automático pode reduzir
--- temporariamente a escala efetiva para manter a interface na tela.
-InterfaceScale = 1.00
-InterfaceAutoFit = true
-SavedInterfaceParts = {}
-InterfacePartSettings = {}
-
---==================================================--
 -- SERVICES
 --==================================================--
 
-Players = game:GetService("Players")
-Lighting = game:GetService("Lighting")
-RunService = game:GetService("RunService")
-Stats = game:GetService("Stats")
-Workspace = game:GetService("Workspace")
-InsertService = game:GetService("InsertService")
-UserInputService = game:GetService("UserInputService")
-HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
+local InsertService = game:GetService("InsertService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
 
-LocalPlayer = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
 
 if not LocalPlayer then
     return
@@ -191,7 +163,7 @@ end
 -- SKY LIST
 --==================================================--
 
-SKY_LIST = {
+local SKY_LIST = {
     {Name = "Minecraft Sky", Id = 10594760952},
     {Name = "Cloudy Sky", Id = 10594745862},
     {Name = "Spiral Galaxy Skybox", Id = 91546602453505},
@@ -215,7 +187,7 @@ SKY_LIST = {
 -- SAFE FUNCTIONS
 --==================================================--
 
-function SafeSet(object, property, value)
+local function SafeSet(object, property, value)
     if not object then
         return false
     end
@@ -225,7 +197,7 @@ function SafeSet(object, property, value)
     end)
 end
 
-function SafeGet(object, property)
+local function SafeGet(object, property)
     if not object then
         return nil
     end
@@ -239,7 +211,7 @@ function SafeGet(object, property)
     return value
 end
 
-function SafeDestroy(object)
+local function SafeDestroy(object)
     if not object then
         return
     end
@@ -249,7 +221,7 @@ function SafeDestroy(object)
     end)
 end
 
-function ClampNumber(value, min, max, default)
+local function ClampNumber(value, min, max, default)
     local number = tonumber(value)
 
     if not number then
@@ -263,7 +235,7 @@ function ClampNumber(value, min, max, default)
     return number
 end
 
-function RGB(r, g, b)
+local function RGB(r, g, b)
     return Color3.fromRGB(
         math.clamp(tonumber(r) or 0, 0, 255),
         math.clamp(tonumber(g) or 0, 0, 255),
@@ -271,42 +243,18 @@ function RGB(r, g, b)
     )
 end
 
-function Color3ToTable(color)
-    if typeof(color) ~= "Color3" then return nil end
-    return {
-        R = math.floor(color.R * 255 + 0.5),
-        G = math.floor(color.G * 255 + 0.5),
-        B = math.floor(color.B * 255 + 0.5)
-    }
-end
-
-function TableToColor3(t)
-    if type(t) ~= "table" then return nil end
-    return Color3.fromRGB(
-        math.clamp(tonumber(t.R) or 255,0,255),
-        math.clamp(tonumber(t.G) or 255,0,255),
-        math.clamp(tonumber(t.B) or 255,0,255)
-    )
-end
-
-function GetGuiTextColor(object)
-    if not object then return nil end
-    local ok, value = pcall(function() return object.TextColor3 end)
-    return ok and value or nil
-end
-
 --==================================================--
 -- SAVE VARIABLES
 --==================================================--
 
-SavedSettings = {}
+local SavedSettings = {}
 
-StretchEnabled = false
-StretchValue = CONFIG.StretchDefault
+local StretchEnabled = false
+local StretchValue = CONFIG.StretchDefault
 
-SkySelected = nil
+local SkySelected = nil
 
-SavedHUDPosition = {
+local SavedHUDPosition = {
     X = 16,
     Y = 80
 }
@@ -315,12 +263,12 @@ SavedHUDPosition = {
 -- FILE SYSTEM
 --==================================================--
 
-function CanUseFileSystem()
+local function CanUseFileSystem()
     return typeof(readfile) == "function"
         and typeof(writefile) == "function"
 end
 
-function LoadSettings()
+local function LoadSettings()
 
     if not CanUseFileSystem() then
         return
@@ -388,26 +336,6 @@ if type(SavedSettings.HUDPosition) == "table" then
 end
 
 --==================================================--
--- RESTORE AUTO SAVE / INTERFACE
---==================================================--
-
-if type(SavedSettings.AutoSave) == "boolean" then
-    CONFIG.AutoSave = SavedSettings.AutoSave
-end
-
-if type(SavedSettings.InterfaceScale) == "number" then
-    InterfaceScale = math.clamp(SavedSettings.InterfaceScale, 0.70, 1.30)
-end
-
-if type(SavedSettings.InterfaceAutoFit) == "boolean" then
-    InterfaceAutoFit = SavedSettings.InterfaceAutoFit
-end
-
-if type(SavedSettings.InterfaceParts) == "table" then
-    SavedInterfaceParts = DeepCopy(SavedSettings.InterfaceParts)
-end
-
---==================================================--
 -- RESTORE PERFORMANCE
 --==================================================--
 
@@ -427,7 +355,7 @@ end
 -- RESTORE HD GRAPHICS
 --==================================================--
 
-function RestoreShaderSettings()
+local function RestoreShaderSettings()
 
     local data = SavedSettings.Shader
 
@@ -441,10 +369,6 @@ function RestoreShaderSettings()
 
     if type(data.LightEnabled) == "boolean" then
         SHADER_CONFIG.LightEnabled = data.LightEnabled
-    end
-
-    if type(data.LightColorEnabled) == "boolean" then
-        SHADER_CONFIG.LightColorEnabled = data.LightColorEnabled
     end
 
     if type(data.Light) == "table" then
@@ -525,16 +449,16 @@ end)
 -- HUD REFERENCE
 --==================================================--
 
-HUD = nil
-ScreenGui = nil
+local HUD = nil
+local ScreenGui = nil
 
 --==================================================--
 -- SAVE SETTINGS
 --==================================================--
 
-function SaveSettings(force)
+local function SaveSettings()
 
-    if not force and not CONFIG.AutoSave then
+    if not CONFIG.AutoSave then
         return
     end
 
@@ -566,11 +490,6 @@ function SaveSettings(force)
             Y = hudY
         },
 
-        AutoSave = CONFIG.AutoSave,
-        InterfaceScale = InterfaceScale,
-        InterfaceAutoFit = InterfaceAutoFit,
-        InterfaceParts = DeepCopy(InterfacePartSettings),
-
         Performance = {},
 
         Shader = {
@@ -579,9 +498,6 @@ function SaveSettings(force)
 
             LightEnabled =
                 SHADER_CONFIG.LightEnabled,
-
-            LightColorEnabled =
-                SHADER_CONFIG.LightColorEnabled,
 
             Light = {
                 R = SHADER_CONFIG.Light.R,
@@ -722,10 +638,10 @@ end
 -- PERFORMANCE
 --==================================================--
 
-PerformanceConnections = {}
-CharacterConnections = {}
+local PerformanceConnections = {}
+local CharacterConnections = {}
 
-function DisconnectConnection(connection)
+local function DisconnectConnection(connection)
 
     if connection then
 
@@ -736,7 +652,7 @@ function DisconnectConnection(connection)
     end
 end
 
-function DisconnectList(list)
+local function DisconnectList(list)
 
     for key, connection in pairs(list) do
 
@@ -746,7 +662,7 @@ function DisconnectList(list)
     end
 end
 
-function IsCharacterPart(object)
+local function IsCharacterPart(object)
 
     if not object then
         return false
@@ -766,7 +682,7 @@ end
 -- HD OWNED EFFECTS
 --==================================================--
 
-HD_EFFECT_NAMES = {
+local HD_EFFECT_NAMES = {
     CustomBloom = true,
     CustomBlur = true,
     CustomColor = true,
@@ -775,7 +691,7 @@ HD_EFFECT_NAMES = {
     CustomSky = true
 }
 
-function IsSKYLARPEffect(object)
+local function IsSKYLARPEffect(object)
 
     if not object then
         return false
@@ -788,7 +704,7 @@ end
 -- NO CAMERA EFFECTS
 --==================================================--
 
-function ApplyNoCameraEffects()
+local function ApplyNoCameraEffects()
 
     if not CONFIG.Performance.NoCameraEffects then
         return
@@ -811,7 +727,7 @@ end
 -- PERFORMANCE FUNCTIONS
 --==================================================--
 
-function ApplyNoClothes(object)
+local function ApplyNoClothes(object)
 
     if not CONFIG.Performance.NoClothes then
         return
@@ -840,7 +756,7 @@ function ApplyNoClothes(object)
     end)
 end
 
-function ApplyLowWater(object)
+local function ApplyLowWater(object)
 
     if not CONFIG.Performance.LowWaterGraphics then
         return
@@ -863,7 +779,7 @@ function ApplyLowWater(object)
     end)
 end
 
-function ApplyNoShadows(object)
+local function ApplyNoShadows(object)
 
     if not CONFIG.Performance.NoShadows then
         return
@@ -881,7 +797,7 @@ function ApplyNoShadows(object)
     end)
 end
 
-function ApplyLowRendering()
+local function ApplyLowRendering()
 
     if not CONFIG.Performance.LowRendering then
         return
@@ -900,7 +816,7 @@ function ApplyLowRendering()
     end
 end
 
-function ApplyLowQualityParts(object)
+local function ApplyLowQualityParts(object)
 
     if not CONFIG.Performance.LowQualityParts then
         return
@@ -933,7 +849,7 @@ function ApplyLowQualityParts(object)
     end)
 end
 
-function ApplyLowQualityModels(object)
+local function ApplyLowQualityModels(object)
 
     if not CONFIG.Performance.LowQualityModels then
         return
@@ -964,7 +880,7 @@ function ApplyLowQualityModels(object)
     end)
 end
 
-function ApplyResetMaterials(object)
+local function ApplyResetMaterials(object)
 
     if not CONFIG.Performance.ResetMaterials then
         return
@@ -993,7 +909,7 @@ function ApplyResetMaterials(object)
     end)
 end
 
-function ApplyRemoveParticles(object)
+local function ApplyRemoveParticles(object)
 
     if not CONFIG.Performance.RemoveParticles then
         return
@@ -1017,7 +933,7 @@ function ApplyRemoveParticles(object)
     end)
 end
 
-function ApplyRemoveLights(object)
+local function ApplyRemoveLights(object)
 
     if not CONFIG.Performance.RemoveLights then
         return
@@ -1038,7 +954,7 @@ function ApplyRemoveLights(object)
     end)
 end
 
-function ApplyRemoveClouds(object)
+local function ApplyRemoveClouds(object)
 
     if not CONFIG.Performance.RemoveClouds then
         return
@@ -1056,7 +972,7 @@ function ApplyRemoveClouds(object)
     end)
 end
 
-function RemoveAllClouds()
+local function RemoveAllClouds()
 
     if not CONFIG.Performance.RemoveClouds then
         return
@@ -1093,7 +1009,7 @@ function RemoveAllClouds()
     end)
 end
 
-function ApplyPerformanceObject(object)
+local function ApplyPerformanceObject(object)
 
     if not object
     or not object.Parent then
@@ -1110,7 +1026,7 @@ function ApplyPerformanceObject(object)
     ApplyRemoveClouds(object)
 end
 
-function ScanWorkspaceOnce()
+local function ScanWorkspaceOnce()
 
     pcall(function()
 
@@ -1132,7 +1048,7 @@ function ScanWorkspaceOnce()
     RemoveAllClouds()
 end
 
-function SetupPerformanceConnections()
+local function SetupPerformanceConnections()
 
     DisconnectList(
         PerformanceConnections
@@ -1173,20 +1089,20 @@ end
 -- STRETCHER
 --==================================================--
 
-StretchConnection = nil
+local StretchConnection = nil
 
 -- CORREÇÃO DO SLIDER
-StretchDragging = false
-StretchDragInput = nil
+local StretchDragging = false
+local StretchDragInput = nil
 
-function StopStretchDragging()
+local function StopStretchDragging()
 
     StretchDragging = false
     StretchDragInput = nil
 
 end
 
-function DisconnectStretch()
+local function DisconnectStretch()
 
     if StretchConnection then
 
@@ -1198,7 +1114,7 @@ function DisconnectStretch()
     end
 end
 
-function ApplyRealStretch()
+local function ApplyRealStretch()
 
     if not StretchEnabled then
         return
@@ -1233,7 +1149,7 @@ function ApplyRealStretch()
     end)
 end
 
-function SetStretchEnabled(enabled)
+local function SetStretchEnabled(enabled)
 
     StretchEnabled = enabled == true
 
@@ -1250,7 +1166,7 @@ function SetStretchEnabled(enabled)
     SaveSettings()
 end
 
-function SetStretchValue(value)
+local function SetStretchValue(value)
 
     local number = tonumber(value)
 
@@ -1274,10 +1190,10 @@ end
 -- SKY SYSTEM
 --==================================================--
 
-CurrentSky = nil
-SkyLoading = false
+local CurrentSky = nil
+local SkyLoading = false
 
-function FindSky(root)
+local function FindSky(root)
 
     if not root then
         return nil
@@ -1293,7 +1209,7 @@ function FindSky(root)
     )
 end
 
-function CloneSkyProperties(
+local function CloneSkyProperties(
     sourceSky,
     targetSky
 )
@@ -1334,7 +1250,7 @@ function CloneSkyProperties(
     return true
 end
 
-function RemoveCurrentSky()
+local function RemoveCurrentSky()
 
     pcall(function()
 
@@ -1360,7 +1276,7 @@ function RemoveCurrentSky()
     CurrentSky = nil
 end
 
-function LoadSkyAsset(assetId)
+local function LoadSkyAsset(assetId)
 
     local objects = {}
 
@@ -1400,7 +1316,7 @@ function LoadSkyAsset(assetId)
     return objects
 end
 
-function ApplySky(
+local function ApplySky(
     skyInfo,
     statusCallback
 )
@@ -1546,14 +1462,12 @@ end
 -- HD GRAPHICS
 --==================================================--
 
-ShaderOriginal = {
+local ShaderOriginal = {
     Captured = false,
 
     Brightness = nil,
     Ambient = nil,
     OutdoorAmbient = nil,
-    ColorShiftTop = nil,
-    ColorShiftBottom = nil,
     EnvironmentDiffuseScale = nil,
     EnvironmentSpecularScale = nil,
     GlobalShadows = nil,
@@ -1563,7 +1477,7 @@ ShaderOriginal = {
     ExposureCompensation = nil
 }
 
-function CaptureLighting()
+local function CaptureLighting()
 
     if ShaderOriginal.Captured then
         return
@@ -1579,12 +1493,6 @@ function CaptureLighting()
 
     ShaderOriginal.OutdoorAmbient =
         SafeGet(Lighting, "OutdoorAmbient")
-
-    ShaderOriginal.ColorShiftTop =
-        SafeGet(Lighting, "ColorShift_Top")
-
-    ShaderOriginal.ColorShiftBottom =
-        SafeGet(Lighting, "ColorShift_Bottom")
 
     ShaderOriginal.EnvironmentDiffuseScale =
         SafeGet(
@@ -1626,7 +1534,7 @@ function CaptureLighting()
         )
 end
 
-function RemoveShaderEffects()
+local function RemoveShaderEffects()
 
     pcall(function()
 
@@ -1653,60 +1561,50 @@ function RemoveShaderEffects()
         end
     end)
 
+    pcall(function()
+
+        local gui =
+            CoreGui:FindFirstChild(
+                "CustomVignette"
+            )
+
+        if gui then
+            SafeDestroy(gui)
+        end
+    end)
 end
 
 --==================================================--
 -- NOVA LUZ HD
 --==================================================--
 
-function ApplyHDLight()
+local function ApplyHDLight()
 
     local L =
         SHADER_CONFIG.Light
 
     if SHADER_CONFIG.LightEnabled then
 
-        -- A luz continua ativa mesmo quando a COR estiver OFF.
-        -- COR OFF = usa as cores originais do Roblox, sem apagar a luz.
-        if SHADER_CONFIG.LightColorEnabled then
-
-            SafeSet(
-                Lighting,
-                "Ambient",
-                RGB(
-                    L.R,
-                    L.G,
-                    L.B
-                )
+        -- Cor escolhida pelo usuário
+        SafeSet(
+            Lighting,
+            "Ambient",
+            RGB(
+                L.R,
+                L.G,
+                L.B
             )
+        )
 
-            SafeSet(
-                Lighting,
-                "OutdoorAmbient",
-                RGB(
-                    L.R,
-                    L.G,
-                    L.B
-                )
+        SafeSet(
+            Lighting,
+            "OutdoorAmbient",
+            RGB(
+                L.R,
+                L.G,
+                L.B
             )
-
-        else
-
-            SafeSet(
-                Lighting,
-                "Ambient",
-                ShaderOriginal.Ambient
-                    or Color3.fromRGB(128, 128, 128)
-            )
-
-            SafeSet(
-                Lighting,
-                "OutdoorAmbient",
-                ShaderOriginal.OutdoorAmbient
-                    or Color3.fromRGB(128, 128, 128)
-            )
-
-        end
+        )
 
         SafeSet(
             Lighting,
@@ -1720,13 +1618,21 @@ function ApplyHDLight()
         SafeSet(
             Lighting,
             "Ambient",
-            Color3.fromRGB(0, 0, 0)
+            Color3.fromRGB(
+                0,
+                0,
+                0
+            )
         )
 
         SafeSet(
             Lighting,
             "OutdoorAmbient",
-            Color3.fromRGB(0, 0, 0)
+            Color3.fromRGB(
+                0,
+                0,
+                0
+            )
         )
 
         SafeSet(
@@ -1737,7 +1643,7 @@ function ApplyHDLight()
     end
 end
 
-function ApplyShaderLighting()
+local function ApplyShaderLighting()
 
     CaptureLighting()
 
@@ -1797,7 +1703,7 @@ function ApplyShaderLighting()
     )
 end
 
-function ApplyShaders()
+local function ApplyShaders()
 
     RemoveShaderEffects()
 
@@ -1993,8 +1899,9 @@ function ApplyShaders()
     if SHADER_CONFIG.VignetteEnabled then
 
         local targetParent = ScreenGui
+
         if not targetParent then
-            return
+            targetParent = CoreGui
         end
 
         local Vignette =
@@ -2028,7 +1935,7 @@ function ApplyShaders()
     end
 end
 
-function DisableShaders()
+local function DisableShaders()
 
     RemoveShaderEffects()
 
@@ -2097,7 +2004,7 @@ function DisableShaders()
     )
 end
 
-function SetShaderEnabled(enabled)
+local function SetShaderEnabled(enabled)
 
     SHADER_CONFIG.Enabled =
         enabled == true
@@ -2115,35 +2022,76 @@ end
 -- GUI
 --==================================================--
 
--- O SKYLARP usa PlayerGui como caminho principal.
--- Isso evita depender de CoreGui/gethui e deixa a interface
--- compatível com o ambiente que foi comprovado no teste.
-PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-
 pcall(function()
-    local old = PlayerGui:FindFirstChild(CONFIG.GUIName)
+
+    local old =
+        CoreGui:FindFirstChild(
+            CONFIG.GUIName
+        )
+
     if old then
         old:Destroy()
     end
 end)
 
-ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = CONFIG.GUIName
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999999
-ScreenGui.Parent = PlayerGui
+pcall(function()
 
-if not ScreenGui.Parent then
-    return
+    ScreenGui =
+        Instance.new("ScreenGui")
+
+    ScreenGui.Name =
+        CONFIG.GUIName
+
+    ScreenGui.ResetOnSpawn =
+        false
+
+    ScreenGui.IgnoreGuiInset =
+        true
+
+    ScreenGui.ZIndexBehavior =
+        Enum.ZIndexBehavior.Sibling
+
+    ScreenGui.DisplayOrder =
+        999999
+
+    ScreenGui.Parent =
+        CoreGui
+end)
+
+if not ScreenGui then
+
+    local PlayerGui =
+        LocalPlayer:WaitForChild(
+            "PlayerGui"
+        )
+
+    ScreenGui =
+        Instance.new("ScreenGui")
+
+    ScreenGui.Name =
+        CONFIG.GUIName
+
+    ScreenGui.ResetOnSpawn =
+        false
+
+    ScreenGui.IgnoreGuiInset =
+        true
+
+    ScreenGui.ZIndexBehavior =
+        Enum.ZIndexBehavior.Sibling
+
+    ScreenGui.DisplayOrder =
+        999999
+
+    ScreenGui.Parent =
+        PlayerGui
 end
 
 --==================================================--
 -- UI HELPERS
 --==================================================--
 
-function Create(
+local function Create(
     className,
     properties,
     parent
@@ -2168,7 +2116,7 @@ function Create(
     return object
 end
 
-function AddCorner(object, radius)
+local function AddCorner(object, radius)
 
     return Create(
         "UICorner",
@@ -2183,7 +2131,7 @@ function AddCorner(object, radius)
     )
 end
 
-function AddStroke(object, transparency)
+local function AddStroke(object, transparency)
 
     return Create(
         "UIStroke",
@@ -2196,7 +2144,7 @@ function AddStroke(object, transparency)
     )
 end
 
-function MakeButton(
+local function MakeButton(
     parent,
     text,
     size,
@@ -2250,7 +2198,7 @@ end
 -- MAIN
 --==================================================--
 
-Main =
+local Main =
     Create(
         "Frame",
         {
@@ -2285,265 +2233,7 @@ Main =
 AddCorner(Main, 14)
 AddStroke(Main, 0.3)
 
---==================================================--
--- SETTINGS / INTERFACE PANEL
---==================================================--
-
-SettingsPanel =
-    Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(280, 390),
-            Position = UDim2.new(0, 18, 0.5, -195),
-            BackgroundColor3 = Color3.fromRGB(20, 20, 24),
-            BorderSizePixel = 0,
-            Visible = false,
-            Active = true,
-            ZIndex = 50
-        },
-        ScreenGui
-    )
-
-AddCorner(SettingsPanel, 14)
-AddStroke(SettingsPanel, 0.3)
-
-SettingsTitle =
-    Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -20, 0, 36),
-            Position = UDim2.fromOffset(10, 8),
-            BackgroundTransparency = 1,
-            Text = "⚙️ CONFIGURAÇÕES",
-            TextColor3 = Color3.fromRGB(255, 255, 255),
-            TextSize = 17,
-            Font = Enum.Font.GothamBold,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 51
-        },
-        SettingsPanel
-    )
-
-SettingsBack = MakeButton(SettingsPanel, "‹ VOLTAR", UDim2.fromOffset(75, 27), UDim2.new(1, -85, 0, 10))
-SettingsBack.ZIndex = 51
-
-ResetConfigButton = MakeButton(SettingsPanel, "REST CONFIG", UDim2.new(1, -24, 0, 45), UDim2.fromOffset(12, 58))
-ResetConfigButton.ZIndex = 51
-
-ModifyInterfaceButton = MakeButton(SettingsPanel, "MODIFICAR INTERFACE", UDim2.new(1, -24, 0, 45), UDim2.fromOffset(12, 111))
-ModifyInterfaceButton.ZIndex = 51
-
-AutoSaveSettingsButton = MakeButton(SettingsPanel, "AUTO SAVE: ON", UDim2.new(1, -24, 0, 40), UDim2.fromOffset(12, 166))
-AutoSaveSettingsButton.ZIndex = 51
-
-SaveAllSettingsButton = MakeButton(SettingsPanel, "SALVAR CONFIGURAÇÕES", UDim2.new(1, -24, 0, 40), UDim2.fromOffset(12, 212))
-SaveAllSettingsButton.ZIndex = 51
-
-InterfaceControls =
-    Create(
-        "Frame",
-        {
-            Size = UDim2.new(1, -24, 0, 120),
-            Position = UDim2.fromOffset(12, 260),
-            BackgroundColor3 = Color3.fromRGB(28, 28, 34),
-            BorderSizePixel = 0,
-            Visible = true,
-            ZIndex = 51
-        },
-        SettingsPanel
-    )
-
-AddCorner(InterfaceControls, 10)
-
-InterfaceSizeLabel =
-    Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -20, 0, 25),
-            Position = UDim2.fromOffset(10, 8),
-            BackgroundTransparency = 1,
-            Text = "TAMANHO DA GUI: 100%",
-            TextColor3 = Color3.fromRGB(235, 235, 240),
-            TextSize = 12,
-            Font = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 52
-        },
-        InterfaceControls
-    )
-
-InterfaceMinus = MakeButton(InterfaceControls, "−", UDim2.fromOffset(48, 35), UDim2.fromOffset(10, 42))
-InterfacePlus = MakeButton(InterfaceControls, "+", UDim2.fromOffset(48, 35), UDim2.fromOffset(68, 42))
-AutoFitButton = MakeButton(InterfaceControls, "AUTO: ON", UDim2.fromOffset(100, 35), UDim2.new(1, -110, 0, 42))
-InterfaceMinus.ZIndex = 52
-InterfacePlus.ZIndex = 52
-AutoFitButton.ZIndex = 52
-
---==================================================--
--- INTERFACE PART EDITOR
---==================================================--
-
-InterfaceEditorPanel =
-    Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(340, 535),
-            Position = UDim2.new(0.5, -170, 0.5, -267),
-            BackgroundColor3 = Color3.fromRGB(20, 20, 24),
-            BorderSizePixel = 0,
-            Visible = false,
-            Active = true,
-            ZIndex = 80
-        },
-        ScreenGui
-    )
-
-AddCorner(InterfaceEditorPanel, 14)
-AddStroke(InterfaceEditorPanel, 0.3)
-
---==================================================--
--- EDITOR DE CORES DA INTERFACE
---==================================================--
-
-InterfaceColorPanel = Create("Frame", {
-    Size = UDim2.fromOffset(300, 330),
-    Position = UDim2.new(0.5, -150, 0.5, -165),
-    BackgroundColor3 = Color3.fromRGB(20,20,24),
-    BorderSizePixel = 0,
-    Visible = false,
-    Active = true,
-    ZIndex = 100
-}, ScreenGui)
-AddCorner(InterfaceColorPanel, 14)
-AddStroke(InterfaceColorPanel, 0.3)
-
-InterfaceColorTitle = Create("TextLabel", {
-    Size = UDim2.new(1,-90,0,34), Position = UDim2.fromOffset(12,8),
-    BackgroundTransparency = 1, Text = "🎨 PERSONALIZAR CORES",
-    TextColor3 = Color3.fromRGB(255,255,255), TextSize = 16,
-    Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 101
-}, InterfaceColorPanel)
-
-InterfaceColorBack = MakeButton(InterfaceColorPanel, "‹ VOLTAR", UDim2.fromOffset(75,27), UDim2.new(1,-87,0,10))
-InterfaceColorBack.ZIndex = 101
-
-ColorTargetButton = MakeButton(InterfaceColorPanel, "FUNDO", UDim2.fromOffset(125,36), UDim2.fromOffset(12,55))
-ColorTargetButton.ZIndex = 101
-TextColorTargetButton = MakeButton(InterfaceColorPanel, "TEXTO", UDim2.fromOffset(125,36), UDim2.fromOffset(150,55))
-TextColorTargetButton.ZIndex = 101
-
-ColorPreview = Create("Frame", {
-    Size=UDim2.fromOffset(276,42), Position=UDim2.fromOffset(12,100),
-    BackgroundColor3=Color3.fromRGB(60,60,68), BorderSizePixel=0, ZIndex=101
-}, InterfaceColorPanel)
-AddCorner(ColorPreview, 8)
-
-function ColorField(label, x)
-    local l=Create("TextLabel",{Size=UDim2.fromOffset(48,25),Position=UDim2.fromOffset(x,155),
-        BackgroundTransparency=1,Text=label,TextColor3=Color3.fromRGB(220,220,225),
-        TextSize=12,Font=Enum.Font.GothamBold,ZIndex=101},InterfaceColorPanel)
-    local b=Create("TextBox",{Size=UDim2.fromOffset(68,34),Position=UDim2.fromOffset(x,180),
-        BackgroundColor3=Color3.fromRGB(30,30,36),BorderSizePixel=0,Text="255",
-        TextColor3=Color3.fromRGB(255,255,255),TextSize=12,Font=Enum.Font.GothamMedium,
-        ClearTextOnFocus=false,ZIndex=101},InterfaceColorPanel)
-    AddCorner(b,7)
-    return b
-end
-
-ColorRBox=ColorField("R",12)
-ColorGBox=ColorField("G",84)
-ColorBBox=ColorField("B",156)
-
-ApplyPartColorButton=MakeButton(InterfaceColorPanel,"APLICAR COR",UDim2.fromOffset(124,36),UDim2.fromOffset(12,230))
-ResetPartColorButton=MakeButton(InterfaceColorPanel,"RESET COR",UDim2.fromOffset(124,36),UDim2.fromOffset(152,230))
-ApplyPartColorButton.ZIndex=101
-ResetPartColorButton.ZIndex=101
-
-PartColorInfo=Create("TextLabel",{Size=UDim2.new(1,-24,0,42),Position=UDim2.fromOffset(12,274),
-    BackgroundTransparency=1,Text="A cor fica salva somente para a parte selecionada.",
-    TextColor3=Color3.fromRGB(170,170,180),TextSize=10,TextWrapped=true,
-    Font=Enum.Font.GothamMedium,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=101},InterfaceColorPanel)
-
-InterfaceEditorTitle = Create("TextLabel", {
-    Size = UDim2.new(1, -90, 0, 34),
-    Position = UDim2.fromOffset(12, 8),
-    BackgroundTransparency = 1,
-    Text = "🛠️ MODIFICAR INTERFACE",
-    TextColor3 = Color3.fromRGB(255,255,255),
-    TextSize = 16,
-    Font = Enum.Font.GothamBold,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    ZIndex = 81
-}, InterfaceEditorPanel)
-
-InterfaceEditorBack = MakeButton(InterfaceEditorPanel, "‹ VOLTAR", UDim2.fromOffset(75,27), UDim2.new(1,-87,0,10))
-InterfaceEditorBack.ZIndex = 81
-
-PartIdLabel = Create("TextLabel", {
-    Size = UDim2.new(1,-24,0,22), Position = UDim2.fromOffset(12,45),
-    BackgroundTransparency = 1, Text = "PARTE SELECIONADA", TextColor3 = Color3.fromRGB(180,180,190),
-    TextSize = 11, Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 81
-}, InterfaceEditorPanel)
-
-PartIdValue = Create("TextLabel", {
-    Size = UDim2.new(1,-24,0,28), Position = UDim2.fromOffset(12,65),
-    BackgroundColor3 = Color3.fromRGB(30,30,36), BorderSizePixel = 0, Text = "MAIN_BASE",
-    TextColor3 = Color3.fromRGB(255,255,255), TextSize = 12, Font = Enum.Font.GothamBold,
-    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 81
-}, InterfaceEditorPanel)
-AddCorner(PartIdValue, 7)
-
-PartList = Create("ScrollingFrame", {
-    Size = UDim2.new(1,-24,0,115), Position = UDim2.fromOffset(12,100),
-    BackgroundColor3 = Color3.fromRGB(25,25,30), BorderSizePixel = 0,
-    ScrollBarThickness = 4, CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 81
-}, InterfaceEditorPanel)
-AddCorner(PartList, 8)
-PartListLayout = Create("UIListLayout", {Padding=UDim.new(0,4), SortOrder=Enum.SortOrder.LayoutOrder}, PartList)
-Create("UIPadding", {PaddingTop=UDim.new(0,5),PaddingBottom=UDim.new(0,5),PaddingLeft=UDim.new(0,5),PaddingRight=UDim.new(0,5)}, PartList)
-
-EditorInfo = Create("TextLabel", {
-    Size = UDim2.new(1,-24,0,30), Position = UDim2.fromOffset(12,219),
-    BackgroundTransparency = 1, Text = "Edite tamanho e posição da parte escolhida.", TextColor3 = Color3.fromRGB(175,175,185),
-    TextSize = 11, Font = Enum.Font.GothamMedium, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 81
-}, InterfaceEditorPanel)
-
-function EditorButton(text, x, y, w)
-    local b = MakeButton(InterfaceEditorPanel, text, UDim2.fromOffset(w or 70,34), UDim2.fromOffset(x,y))
-    b.ZIndex = 82
-    return b
-end
-
-SizeXMinus = EditorButton("X −", 12, 255, 62)
-SizeXPlus  = EditorButton("X +", 80, 255, 62)
-SizeYMinus = EditorButton("Y −", 150, 255, 62)
-SizeYPlus  = EditorButton("Y +", 218, 255, 62)
-
-PosXMinus = EditorButton("← X", 12, 295, 62)
-PosXPlus  = EditorButton("X →", 80, 295, 62)
-PosYMinus = EditorButton("↑ Y", 150, 295, 62)
-PosYPlus  = EditorButton("Y ↓", 218, 295, 62)
-
-EditorValues = Create("TextLabel", {
-    Size=UDim2.new(1,-24,0,48), Position=UDim2.fromOffset(12,337), BackgroundColor3=Color3.fromRGB(28,28,34),
-    BorderSizePixel=0, Text="Tamanho: -- x --\nPosição: --, --", TextColor3=Color3.fromRGB(235,235,240), TextSize=11,
-    Font=Enum.Font.GothamMedium, TextWrapped=true, ZIndex=81
-}, InterfaceEditorPanel)
-AddCorner(EditorValues,8)
-
-ResetPartButton = EditorButton("RESET PARTE", 12, 395, 130)
-SavePartButton = EditorButton("SALVAR PARTE", 150, 395, 130)
-
-EditColorsButton = EditorButton("🎨 CORES", 12, 435, 128)
-EditorAutoClamp = EditorButton("AUTO ENQUADRAR", 148, 435, 132)
-
-InterfaceParts = {}
-InterfacePartDefaults = {}
-SelectedInterfacePartID = "MAIN_BASE"
-
-ClampInterfaceObject
-
-Header =
+local Header =
     Create(
         "Frame",
         {
@@ -2562,14 +2252,14 @@ Header =
         Main
     )
 
-Title =
+local Title =
     Create(
         "TextLabel",
         {
             Size =
                 UDim2.new(
                     1,
-                    -70,
+                    -30,
                     0,
                     32
                 ),
@@ -2602,29 +2292,7 @@ Title =
         Header
     )
 
-SettingsButton =
-    Create(
-        "TextButton",
-        {
-            Size = UDim2.fromOffset(34, 34),
-            Position = UDim2.new(1, -43, 0, 7),
-            BackgroundColor3 = Color3.fromRGB(38, 38, 44),
-            BorderSizePixel = 0,
-            Text = "⚙️",
-            TextSize = 17,
-            Font = Enum.Font.GothamBold,
-            TextColor3 = Color3.fromRGB(235, 235, 240),
-            AutoButtonColor = true,
-            Active = true,
-            ZIndex = 20
-        },
-        Header
-    )
-
-AddCorner(SettingsButton, 9)
-AddStroke(SettingsButton, 0.45)
-
-Subtitle =
+local Subtitle =
     Create(
         "TextLabel",
         {
@@ -2665,7 +2333,7 @@ Subtitle =
         Header
     )
 
-MainContent =
+local MainContent =
     Create(
         "Frame",
         {
@@ -2710,7 +2378,7 @@ Create(
 -- PANELS
 --==================================================--
 
-BoostPanel =
+local BoostPanel =
     Create(
         "Frame",
         {
@@ -2747,7 +2415,7 @@ BoostPanel =
 AddCorner(BoostPanel, 14)
 AddStroke(BoostPanel, 0.3)
 
-StretchPanel =
+local StretchPanel =
     Create(
         "Frame",
         {
@@ -2784,7 +2452,7 @@ StretchPanel =
 AddCorner(StretchPanel, 14)
 AddStroke(StretchPanel, 0.3)
 
-SkyPanel =
+local SkyPanel =
     Create(
         "Frame",
         {
@@ -2821,7 +2489,7 @@ SkyPanel =
 AddCorner(SkyPanel, 14)
 AddStroke(SkyPanel, 0.3)
 
-HDPanel =
+local HDPanel =
     Create(
         "Frame",
         {
@@ -2862,7 +2530,7 @@ AddStroke(HDPanel, 0.3)
 -- BOOST
 --==================================================--
 
-BoostHeader =
+local BoostHeader =
     Create(
         "TextLabel",
         {
@@ -2902,7 +2570,7 @@ BoostHeader =
         BoostPanel
     )
 
-BoostBack =
+local BoostBack =
     MakeButton(
         BoostPanel,
         "‹ VOLTAR",
@@ -2910,7 +2578,7 @@ BoostBack =
         UDim2.new(1, -85, 0, 10)
     )
 
-BoostList =
+local BoostList =
     Create(
         "ScrollingFrame",
         {
@@ -2957,7 +2625,7 @@ Create(
     BoostList
 )
 
-function SetPerformanceOption(
+local function SetPerformanceOption(
     option,
     enabled
 )
@@ -2979,7 +2647,7 @@ function SetPerformanceOption(
     SaveSettings()
 end
 
-function CreateToggle(
+local function CreateToggle(
     parent,
     text,
     option,
@@ -3144,7 +2812,7 @@ function CreateToggle(
     return row
 end
 
-Options = {
+local Options = {
     {"No Camera Effects", "NoCameraEffects"},
     {"No Clothes", "NoClothes"},
     {"Low Water Graphics", "LowWaterGraphics"},
@@ -3172,7 +2840,7 @@ end
 -- STRETCH PANEL
 --==================================================--
 
-StretchTitle =
+local StretchTitle =
     Create(
         "TextLabel",
         {
@@ -3212,7 +2880,7 @@ StretchTitle =
         StretchPanel
     )
 
-StretchBack =
+local StretchBack =
     MakeButton(
         StretchPanel,
         "‹ VOLTAR",
@@ -3220,7 +2888,7 @@ StretchBack =
         UDim2.new(1, -85, 0, 12)
     )
 
-StretchToggle =
+local StretchToggle =
     MakeButton(
         StretchPanel,
 
@@ -3233,7 +2901,7 @@ StretchToggle =
         UDim2.fromOffset(15, 60)
     )
 
-StretchLabel =
+local StretchLabel =
     Create(
         "TextLabel",
         {
@@ -3277,7 +2945,7 @@ StretchLabel =
 -- STRETCH SLIDER
 --==================================================--
 
-StretchSlider =
+local StretchSlider =
     Create(
         "Frame",
         {
@@ -3311,7 +2979,7 @@ StretchSlider =
 
 AddCorner(StretchSlider, 4)
 
-StretchFill =
+local StretchFill =
     Create(
         "Frame",
         {
@@ -3334,7 +3002,7 @@ StretchFill =
 
 AddCorner(StretchFill, 4)
 
-StretchKnob =
+local StretchKnob =
     Create(
         "Frame",
         {
@@ -3368,7 +3036,7 @@ StretchKnob =
 
 AddCorner(StretchKnob, 8)
 
-StretchBox =
+local StretchBox =
     Create(
         "TextBox",
         {
@@ -3423,7 +3091,7 @@ StretchBox =
 AddCorner(StretchBox, 8)
 AddStroke(StretchBox, 0.55)
 
-StretchInfo =
+local StretchInfo =
     Create(
         "TextLabel",
         {
@@ -3464,7 +3132,7 @@ StretchInfo =
         StretchPanel
     )
 
-function RefreshStretchSlider()
+local function RefreshStretchSlider()
 
     local alpha =
         (
@@ -3507,7 +3175,7 @@ function RefreshStretchSlider()
         )
 end
 
-function SetStretchFromSlider(
+local function SetStretchFromSlider(
     inputX
 )
 
@@ -3670,7 +3338,7 @@ RefreshStretchSlider()
 -- SKY PANEL
 --==================================================--
 
-SkyTitle =
+local SkyTitle =
     Create(
         "TextLabel",
         {
@@ -3710,7 +3378,7 @@ SkyTitle =
         SkyPanel
     )
 
-SkyBack =
+local SkyBack =
     MakeButton(
         SkyPanel,
         "‹ VOLTAR",
@@ -3718,7 +3386,7 @@ SkyBack =
         UDim2.new(1, -85, 0, 10)
     )
 
-SkyStatus =
+local SkyStatus =
     Create(
         "TextLabel",
         {
@@ -3761,7 +3429,7 @@ SkyStatus =
         SkyPanel
     )
 
-SkyListFrame =
+local SkyListFrame =
     Create(
         "ScrollingFrame",
         {
@@ -3812,7 +3480,7 @@ Create(
     SkyListFrame
 )
 
-function CreateSkyCard(
+local function CreateSkyCard(
     skyInfo,
     index
 )
@@ -4005,7 +3673,7 @@ end
 -- HD GRAPHICS PANEL
 --==================================================--
 
-HDTitle =
+local HDTitle =
     Create(
         "TextLabel",
         {
@@ -4045,7 +3713,7 @@ HDTitle =
         HDPanel
     )
 
-HDBack =
+local HDBack =
     MakeButton(
         HDPanel,
         "‹ VOLTAR",
@@ -4053,7 +3721,7 @@ HDBack =
         UDim2.new(1, -85, 0, 10)
     )
 
-HDList =
+local HDList =
     Create(
         "ScrollingFrame",
         {
@@ -4109,7 +3777,7 @@ Create(
     HDList
 )
 
-function CreateHDToggle(
+local function CreateHDToggle(
     text,
     key
 )
@@ -4241,9 +3909,9 @@ function CreateHDToggle(
             SHADER_CONFIG[key] =
                 not SHADER_CONFIG[key]
 
-            if SHADER_CONFIG.Enabled then
-                ApplyShaders()
-            end
+            -- Sempre reaplica: ao desligar o SHADER,
+            -- ApplyShaders() remove os efeitos personalizados.
+            ApplyShaders()
 
             Refresh()
             SaveSettings()
@@ -4256,21 +3924,27 @@ function CreateHDToggle(
 end
 
 --==================================================--
+-- CONTROLE PRINCIPAL DO SHADER
+--==================================================--
+
+-- Este é o interruptor geral do HD GRAPHICS.
+-- Ele fica no topo da lista, antes de LUZ/BLOOM/BLUR.
+local ShaderToggle =
+    CreateHDToggle(
+        "SHADER",
+        "Enabled"
+    )
+
+--==================================================--
 -- NOVA FUNÇÃO: TOGGLE DA LUZ
 --==================================================--
 
-LightToggle =
-    CreateHDToggle(
-        "LUZ",
-        "LightEnabled"
-    )
+-- Declarações antecipadas: o botão da luz usa estas funções antes
+-- da implementação completa do seletor de cores.
+local GetLightColor
+local OpenLightPicker
 
--- Forward declaration do picker para o botão poder ser criado antes dele.
-OpenLightPicker
-
--- Cor atual da luz. Declarada antes do botão para evitar referência
--- a função ainda não inicializada durante a criação da interface.
-function GetLightColor()
+GetLightColor = function()
     return RGB(
         SHADER_CONFIG.Light.R,
         SHADER_CONFIG.Light.G,
@@ -4278,9 +3952,15 @@ function GetLightColor()
     )
 end
 
+local LightToggle =
+    CreateHDToggle(
+        "LUZ",
+        "LightEnabled"
+    )
+
 -- Botão de cor fica diretamente dentro do botão LUZ.
 -- Assim não ocupa uma linha separada no HD GRAPHICS.
-LightColorButton = Create(
+local LightColorButton = Create(
     "TextButton",
     {
         Size = UDim2.fromOffset(34, 23),
@@ -4295,7 +3975,7 @@ LightColorButton = Create(
     LightToggle
 )
 AddCorner(LightColorButton, 6)
-LightColorStroke = AddStroke(LightColorButton, 0)
+local LightColorStroke = AddStroke(LightColorButton, 0)
 LightColorStroke.Thickness = 1.5
 LightColorStroke.Color = Color3.fromRGB(255, 255, 255)
 
@@ -4313,66 +3993,25 @@ Create(
     LightColorButton
 )
 
--- Botão separado para desligar SOMENTE a cor personalizada.
--- A cor escolhida continua salva e pode ser religada depois.
-LightColorToggle = Create(
-    "TextButton",
-    {
-        Size = UDim2.fromOffset(34, 23),
-        Position = UDim2.new(1, -132, 0.5, -11),
-        BackgroundColor3 = Color3.fromRGB(65, 120, 80),
-        BorderSizePixel = 0,
-        Text = "COR",
-        TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextSize = 8,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
-        ZIndex = 20,
-        Active = true
-    },
-    LightToggle
-)
-AddCorner(LightColorToggle, 6)
-
-function RefreshLightColorToggle()
-    if SHADER_CONFIG.LightColorEnabled then
-        LightColorToggle.Text = "COR"
-        LightColorToggle.BackgroundColor3 = Color3.fromRGB(65, 120, 80)
-    else
-        LightColorToggle.Text = "COR OFF"
-        LightColorToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 68)
-    end
-end
-
-LightColorToggle.Activated:Connect(function()
-    SHADER_CONFIG.LightColorEnabled = not SHADER_CONFIG.LightColorEnabled
-
-    if SHADER_CONFIG.Enabled and SHADER_CONFIG.LightEnabled then
-        ApplyHDLight()
-    end
-
-    RefreshLightColorToggle()
-    SaveSettings()
-end)
-
-LightColorButton.Activated:Connect(function()
-    OpenLightPicker()
-end)
-
-RefreshLightColorToggle()
+-- A conexão é feita depois que OpenLightPicker for definido.
 
 --==================================================--
 --==================================================--
 -- COLOR PICKER RGB 24-BIT
 -- 16.777.216 CORES POSSÍVEIS
--- RODA COM MARCADOR LIVRE + BRILHO
--- SEM PRÉVIA DA LUZ
+-- RODA DE CORES + MARCADOR + PRÉVIA
+-- A LUZ SÓ É APLICADA NO OK
 --==================================================--
 
-LightPicker = nil
-LightPickerOpen = false
+local LightPicker = nil
+local LightPickerOpen = false
+local PickerOriginalLight = nil
+local PickerHue = 0
+local PickerSat = 0
+local PickerVal = 1
+local PickerUpdate = nil
 
-function RGBToHex(r, g, b)
+local function RGBToHex(r, g, b)
     return string.format(
         "#%02X%02X%02X",
         math.clamp(math.floor(tonumber(r) or 0), 0, 255),
@@ -4381,7 +4020,7 @@ function RGBToHex(r, g, b)
     )
 end
 
-function ColorToHex(color)
+local function ColorToHex(color)
     return RGBToHex(
         math.floor(color.R * 255 + 0.5),
         math.floor(color.G * 255 + 0.5),
@@ -4389,512 +4028,485 @@ function ColorToHex(color)
     )
 end
 
-function ApplySelectedLightColor()
-    if SHADER_CONFIG.Enabled
-    and SHADER_CONFIG.LightEnabled then
+local function ApplySelectedLightColor()
+    if SHADER_CONFIG.Enabled and SHADER_CONFIG.LightEnabled then
         ApplyHDLight()
     end
-
     SaveSettings()
 end
 
 OpenLightPicker = function()
+    if not LightPicker then
+        local pickerWidth = 360
+        local pickerHeight = 505
 
-    if LightPicker then
-        LightPicker.Visible = true
-        LightPickerOpen = true
-        return
-    end
-
-    local pickerWidth = 330
-    local pickerHeight = 500
-
-    LightPicker = Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(pickerWidth, pickerHeight),
-            Position = UDim2.new(0.5, -pickerWidth / 2, 0.5, -pickerHeight / 2),
-            BackgroundColor3 = Color3.fromRGB(20, 20, 25),
-            BorderSizePixel = 0,
-            ZIndex = 200,
-            Active = true,
-            Visible = true
-        },
-        ScreenGui
-    )
-
-    AddCorner(LightPicker, 14)
-    AddStroke(LightPicker, 0.25)
-
-    local title = Create(
-        "TextLabel",
-        {
-            Size = UDim2.new(1, -70, 0, 34),
-            Position = UDim2.fromOffset(12, 8),
-            BackgroundTransparency = 1,
-            Text = "COR DA LUZ",
-            TextColor3 = Color3.fromRGB(255, 255, 255),
-            TextSize = 15,
-            Font = Enum.Font.GothamBold,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 201
-        },
-        LightPicker
-    )
-
-    local close = Create(
-        "TextButton",
-        {
-            Size = UDim2.fromOffset(34, 30),
-            Position = UDim2.new(1, -42, 0, 8),
-            BackgroundColor3 = Color3.fromRGB(42, 42, 50),
-            BorderSizePixel = 0,
-            Text = "×",
-            TextColor3 = Color3.fromRGB(240, 240, 245),
-            TextSize = 20,
-            Font = Enum.Font.GothamBold,
-            ZIndex = 202
-        },
-        LightPicker
-    )
-    AddCorner(close, 8)
-
-    --==================================================--
-    -- RODA DE CORES
-    -- ÂNGULO = MATIZ / DISTÂNCIA DO CENTRO = SATURAÇÃO
-    -- CENTRO = SATURAÇÃO 0 (BRANCO/NEUTRO)
-    --==================================================--
-
-    local wheelSize = 310
-    local wheelRadius = 149
-
-    local wheel = Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(wheelSize, wheelSize),
-            Position = UDim2.fromOffset(18, 58),
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            ZIndex = 201,
-            Active = true
-        },
-        LightPicker
-    )
-
-    -- Base circular de matiz. Vários raios formam a roda de cores.
-    for i = 0, 359 do
-        local hueValue = i / 360
-
-        local ray = Create(
+        LightPicker = Create(
             "Frame",
             {
-                Size = UDim2.fromOffset(3, wheelRadius),
+                Size = UDim2.fromOffset(pickerWidth, pickerHeight),
+                Position = UDim2.new(0.5, -pickerWidth / 2, 0.5, -pickerHeight / 2),
+                BackgroundColor3 = Color3.fromRGB(20, 20, 25),
+                BorderSizePixel = 0,
+                ZIndex = 200,
+                Active = true,
+                Visible = false
+            },
+            ScreenGui
+        )
+
+        AddCorner(LightPicker, 14)
+        AddStroke(LightPicker, 0.25)
+
+        Create(
+            "TextLabel",
+            {
+                Size = UDim2.new(1, -70, 0, 34),
+                Position = UDim2.fromOffset(12, 8),
+                BackgroundTransparency = 1,
+                Text = "COR DA LUZ",
+                TextColor3 = Color3.fromRGB(255, 255, 255),
+                TextSize = 15,
+                Font = Enum.Font.GothamBold,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 201
+            },
+            LightPicker
+        )
+
+        local close = Create(
+            "TextButton",
+            {
+                Size = UDim2.fromOffset(34, 30),
+                Position = UDim2.new(1, -42, 0, 8),
+                BackgroundColor3 = Color3.fromRGB(42, 42, 50),
+                BorderSizePixel = 0,
+                Text = "×",
+                TextColor3 = Color3.fromRGB(240, 240, 245),
+                TextSize = 20,
+                Font = Enum.Font.GothamBold,
+                ZIndex = 220
+            },
+            LightPicker
+        )
+        AddCorner(close, 8)
+
+        -- RODA: vários raios formam o espectro. O centro é branco,
+        -- a distância do centro controla a saturação.
+        local wheelSize = 270
+        local wheelRadius = 129
+
+        local wheel = Create(
+            "Frame",
+            {
+                Size = UDim2.fromOffset(wheelSize, wheelSize),
+                Position = UDim2.fromOffset(18, 58),
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                ZIndex = 201,
+                Active = true,
+                ClipsDescendants = true
+            },
+            LightPicker
+        )
+
+        -- 180 segmentos: suficientemente suave no celular sem criar centenas
+        -- de objetos desnecessários.
+        for i = 0, 179 do
+            local hueValue = i / 180
+            Create(
+                "Frame",
+                {
+                    Size = UDim2.fromOffset(3, wheelRadius),
+                    Position = UDim2.new(0.5, 0, 0.5, 0),
+                    AnchorPoint = Vector2.new(0.5, 1),
+                    BackgroundColor3 = Color3.fromHSV(hueValue, 1, 1),
+                    BorderSizePixel = 0,
+                    Rotation = i * 2,
+                    ZIndex = 202,
+                    Active = false
+                },
+                wheel
+            )
+        end
+
+        -- Camadas brancas: centro branco -> borda saturada.
+        for i = 1, 24 do
+            local radius = wheelRadius * (i / 24)
+            local diameter = radius * 2
+            local transparency = 0.03 + ((i - 1) / 23) * 0.94
+            local fade = Create(
+                "Frame",
+                {
+                    Size = UDim2.fromOffset(diameter, diameter),
+                    Position = UDim2.new(0.5, -radius, 0.5, -radius),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BackgroundTransparency = transparency,
+                    BorderSizePixel = 0,
+                    ZIndex = 203,
+                    Active = false
+                },
+                wheel
+            )
+            AddCorner(fade, radius)
+        end
+
+        local marker = Create(
+            "Frame",
+            {
+                Size = UDim2.fromOffset(24, 24),
+                AnchorPoint = Vector2.new(0.5, 0.5),
                 Position = UDim2.new(0.5, 0, 0.5, 0),
-                AnchorPoint = Vector2.new(0.5, 1),
-                BackgroundColor3 = Color3.fromHSV(hueValue, 1, 1),
+                BackgroundColor3 = Color3.new(1, 1, 1),
                 BorderSizePixel = 0,
-                Rotation = i,
-                ZIndex = 202,
+                ZIndex = 215,
                 Active = false
             },
             wheel
         )
-    end
+        AddCorner(marker, 12)
+        local markerStroke = AddStroke(marker, 0)
+        markerStroke.Thickness = 3
+        markerStroke.Color = Color3.fromRGB(15, 15, 18)
 
-    -- Suaviza a saturação: o centro fica branco e a cor aparece
-    -- progressivamente até a borda.
-    for i = 1, 22 do
-        local radius = wheelRadius * (i / 22)
-        local diameter = radius * 2
-        local transparency = 0.04 + ((i - 1) / 21) * 0.92
-
-        local fade = Create(
+        local markerInner = Create(
             "Frame",
             {
-                Size = UDim2.fromOffset(diameter, diameter),
-                Position = UDim2.new(0.5, -radius, 0.5, -radius),
+                Size = UDim2.fromOffset(10, 10),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.fromScale(0.5, 0.5),
                 BackgroundColor3 = Color3.new(1, 1, 1),
-                BackgroundTransparency = transparency,
                 BorderSizePixel = 0,
-                ZIndex = 203,
+                ZIndex = 216,
                 Active = false
             },
-            wheel
+            marker
         )
-        AddCorner(fade, radius)
-    end
+        AddCorner(markerInner, 5)
 
-    -- Marcador: pode ficar em QUALQUER ponto da roda, inclusive no centro.
-    local marker = Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(24, 24),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.new(0.5, 0, 0.5, 0),
-            BackgroundColor3 = GetLightColor(),
-            BorderSizePixel = 0,
-            ZIndex = 210,
-            Active = false
-        },
-        wheel
-    )
-    AddCorner(marker, 12)
-    local markerStroke = AddStroke(marker, 0)
-    markerStroke.Thickness = 3
-    markerStroke.Color = Color3.fromRGB(15, 15, 18)
+        -- PRÉVIA GRANDE DA COR ESCOLHIDA.
+        local preview = Create(
+            "Frame",
+            {
+                Size = UDim2.fromOffset(42, 42),
+                Position = UDim2.fromOffset(302, 58),
+                BackgroundColor3 = Color3.new(1, 1, 1),
+                BorderSizePixel = 0,
+                ZIndex = 205
+            },
+            LightPicker
+        )
+        AddCorner(preview, 10)
+        local previewStroke = AddStroke(preview, 0)
+        previewStroke.Thickness = 2
+        previewStroke.Color = Color3.fromRGB(255, 255, 255)
 
-    local markerInner = Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(10, 10),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BorderSizePixel = 0,
-            ZIndex = 211,
-            Active = false
-        },
-        marker
-    )
-    AddCorner(markerInner, 5)
-
-    --==================================================--
-    -- BRILHO
-    --==================================================--
-
-    local brightnessLabel = Create(
-        "TextLabel",
-        {
-            Size = UDim2.fromOffset(290, 18),
-            Position = UDim2.fromOffset(20, 360),
-            BackgroundTransparency = 1,
-            Text = "BRILHO",
-            TextColor3 = Color3.fromRGB(190, 190, 200),
-            TextSize = 10,
-            Font = Enum.Font.GothamBold,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 205
-        },
-        LightPicker
-    )
-
-    local brightness = Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(330, 18),
-            Position = UDim2.fromOffset(18, 386),
-            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-            BorderSizePixel = 0,
-            ZIndex = 205,
-            Active = true
-        },
-        LightPicker
-    )
-    AddCorner(brightness, 9)
-
-    local brightnessGradient = Create(
-        "UIGradient",
-        {
-            Rotation = 0,
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
-                ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
-            })
-        },
-        brightness
-    )
-
-    local brightnessHit = Create(
-        "TextButton",
-        {
-            Size = UDim2.fromScale(1, 1),
-            Position = UDim2.fromScale(0, 0),
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            Text = "",
-            AutoButtonColor = false,
-            ZIndex = 206,
-            Active = true
-        },
-        brightness
-    )
-
-    local brightnessKnob = Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(20, 20),
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.new(1, 0, 0.5, 0),
-            BackgroundColor3 = GetLightColor(),
-            BorderSizePixel = 0,
-            ZIndex = 208,
-            Active = false
-        },
-        brightness
-    )
-    AddCorner(brightnessKnob, 10)
-    local brightnessStroke = AddStroke(brightnessKnob, 0)
-    brightnessStroke.Thickness = 2
-    brightnessStroke.Color = Color3.fromRGB(15, 15, 18)
-
-    local info = Create(
-        "TextLabel",
-        {
-            Size = UDim2.fromOffset(330, 20),
-            Position = UDim2.fromOffset(18, 408),
-            BackgroundTransparency = 1,
-            Text = "HEX: #FFFFFF    RGB: 255, 255, 255",
-            TextColor3 = Color3.fromRGB(220, 220, 228),
-            TextSize = 10,
-            Font = Enum.Font.GothamMedium,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 205
-        },
-        LightPicker
-    )
-
-    -- A imagem enviada pelo usuário é usada como referência visual.
-    -- O guia abaixo é desenhado nativamente no Roblox para não depender
-    -- de um asset externo; se houver um ID de decal da imagem, ele pode
-    -- substituir este guia por um ImageLabel.
-    -- Guia visual lateral inspirado na roda enviada: as cores ficam
-    -- representadas por setores contínuos ao redor da paleta.
-    local guide = Create(
-        "Frame",
-        {
-            Size = UDim2.fromOffset(42, 220),
-            Position = UDim2.fromOffset(375, 86),
-            BackgroundColor3 = Color3.fromRGB(35, 35, 42),
-            BorderSizePixel = 0,
-            ZIndex = 204
-        },
-        LightPicker
-    )
-    AddCorner(guide, 8)
-
-    local guideGradient = Create(
-        "UIGradient",
-        {
-            Rotation = 90,
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
-                ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 0, 255)),
-                ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 0, 255)),
-                ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
-                ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 255, 0)),
-                ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 255, 0)),
-                ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0))
-            })
-        },
-        guide
-    )
-
-    local guideText = Create(
-        "TextLabel",
-        {
-            Size = UDim2.fromOffset(42, 42),
-            Position = UDim2.fromOffset(375, 42),
-            BackgroundTransparency = 1,
-            Text = "CORES",
-            TextColor3 = Color3.fromRGB(205, 205, 215),
-            TextSize = 9,
-            Font = Enum.Font.GothamBold,
-            TextXAlignment = Enum.TextXAlignment.Center,
-            ZIndex = 205
-        },
-        LightPicker
-    )
-
-    local okButton = MakeButton(
-        LightPicker,
-        "OK",
-        UDim2.fromOffset(42, 48),
-        UDim2.fromOffset(375, 346)
-    )
-    okButton.ZIndex = 205
-    okButton.TextSize = 12
-
-    local cancelButton = MakeButton(
-        LightPicker,
-        "X",
-        UDim2.fromOffset(42, 34),
-        UDim2.fromOffset(375, 398)
-    )
-    cancelButton.ZIndex = 205
-    cancelButton.TextSize = 11
-
-    local hue, sat, val = Color3.toHSV(GetLightColor())
-
-    local function UpdateColorFromHSV(save)
-        local color = Color3.fromHSV(hue, sat, val)
-        local r = math.floor(color.R * 255 + 0.5)
-        local g = math.floor(color.G * 255 + 0.5)
-        local b = math.floor(color.B * 255 + 0.5)
-
-        SHADER_CONFIG.Light.R = r
-        SHADER_CONFIG.Light.G = g
-        SHADER_CONFIG.Light.B = b
-
-        marker.BackgroundColor3 = color
-        markerInner.BackgroundColor3 = color
-        brightnessKnob.BackgroundColor3 = color
-        if LightColorButton then
-            LightColorButton.BackgroundColor3 = color
-        end
-
-        -- Matiz + saturação: o marcador acompanha exatamente o ponto tocado.
-        local angle = hue * math.pi * 2 - math.pi / 2
-        local markerRadius = sat * (wheelRadius - 10)
-        local markerX = math.cos(angle) * markerRadius
-        local markerY = math.sin(angle) * markerRadius
-
-        if sat <= 0.001 then
-            markerX = 0
-            markerY = 0
-        end
-
-        marker.Position = UDim2.new(0.5, markerX, 0.5, markerY)
-
-        brightnessGradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
-            ColorSequenceKeypoint.new(1, Color3.fromHSV(hue, sat, 1))
-        })
-
-        brightnessKnob.Position = UDim2.new(val, 0, 0.5, 0)
-
-        info.Text = string.format(
-            "HEX: %s    RGB: %d, %d, %d",
-            ColorToHex(color),
-            r,
-            g,
-            b
+        Create(
+            "TextLabel",
+            {
+                Size = UDim2.fromOffset(42, 16),
+                Position = UDim2.fromOffset(302, 104),
+                BackgroundTransparency = 1,
+                Text = "PRÉVIA",
+                TextColor3 = Color3.fromRGB(190, 190, 200),
+                TextSize = 8,
+                Font = Enum.Font.GothamBold,
+                TextXAlignment = Enum.TextXAlignment.Center,
+                ZIndex = 205
+            },
+            LightPicker
         )
 
-        if save ~= false then
-            ApplySelectedLightColor()
-        end
-    end
-
-    local function SetWheelFromPosition(inputPosition)
-        local pos = wheel.AbsolutePosition
-        local size = wheel.AbsoluteSize
-        local center = pos + size / 2
-
-        local dx = inputPosition.X - center.X
-        local dy = inputPosition.Y - center.Y
-        local distance = math.sqrt(dx * dx + dy * dy)
-        local maxDistance = wheelRadius - 2
-
-        -- Limita o toque à área circular.
-        local limitedDistance = math.min(distance, maxDistance)
-
-        if distance > 0.001 then
-            local angle = math.atan2(dy, dx)
-            hue = (angle / (math.pi * 2) + 0.25) % 1
-        end
-
-        -- Distância do centro controla a saturação.
-        -- Portanto o marcador pode ser colocado no centro.
-        sat = math.clamp(limitedDistance / maxDistance, 0, 1)
-
-        UpdateColorFromHSV()
-    end
-
-    local function SetBrightnessFromPosition(inputPosition)
-        local pos = brightness.AbsolutePosition
-        local size = brightness.AbsoluteSize
-        val = math.clamp(
-            (inputPosition.X - pos.X) / size.X,
-            0,
-            1
+        local brightnessLabel = Create(
+            "TextLabel",
+            {
+                Size = UDim2.fromOffset(270, 18),
+                Position = UDim2.fromOffset(18, 326),
+                BackgroundTransparency = 1,
+                Text = "BRILHO",
+                TextColor3 = Color3.fromRGB(190, 190, 200),
+                TextSize = 10,
+                Font = Enum.Font.GothamBold,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 205
+            },
+            LightPicker
         )
-        UpdateColorFromHSV()
-    end
 
-    local wheelDragging = false
-    local wheelInput = nil
-    local brightnessDragging = false
-    local brightnessInput = nil
+        local brightness = Create(
+            "Frame",
+            {
+                Size = UDim2.fromOffset(270, 18),
+                Position = UDim2.fromOffset(18, 350),
+                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+                BorderSizePixel = 0,
+                ZIndex = 205,
+                Active = true
+            },
+            LightPicker
+        )
+        AddCorner(brightness, 9)
 
-    wheel.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            wheelDragging = true
-            wheelInput = input
-            SetWheelFromPosition(input.Position)
+        local brightnessHit = Create(
+            "TextButton",
+            {
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                Text = "",
+                AutoButtonColor = false,
+                ZIndex = 206,
+                Active = true
+            },
+            brightness
+        )
+
+        local brightnessKnob = Create(
+            "Frame",
+            {
+                Size = UDim2.fromOffset(20, 20),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                Position = UDim2.new(1, 0, 0.5, 0),
+                BackgroundColor3 = Color3.new(1, 1, 1),
+                BorderSizePixel = 0,
+                ZIndex = 208,
+                Active = false
+            },
+            brightness
+        )
+        AddCorner(brightnessKnob, 10)
+        local brightnessStroke = AddStroke(brightnessKnob, 0)
+        brightnessStroke.Thickness = 2
+        brightnessStroke.Color = Color3.fromRGB(15, 15, 18)
+
+        local info = Create(
+            "TextLabel",
+            {
+                Size = UDim2.fromOffset(270, 20),
+                Position = UDim2.fromOffset(18, 378),
+                BackgroundTransparency = 1,
+                Text = "HEX: #FFFFFF    RGB: 255, 255, 255",
+                TextColor3 = Color3.fromRGB(220, 220, 228),
+                TextSize = 10,
+                Font = Enum.Font.GothamMedium,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                ZIndex = 205
+            },
+            LightPicker
+        )
+
+        -- Guia de matiz semelhante à referência enviada.
+        local guide = Create(
+            "Frame",
+            {
+                Size = UDim2.fromOffset(42, 170),
+                Position = UDim2.fromOffset(302, 128),
+                BackgroundColor3 = Color3.fromRGB(35, 35, 42),
+                BorderSizePixel = 0,
+                ZIndex = 204
+            },
+            LightPicker
+        )
+        AddCorner(guide, 8)
+        Create(
+            "UIGradient",
+            {
+                Rotation = 90,
+                Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+                    ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 0, 255)),
+                    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 0, 255)),
+                    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
+                    ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 255, 0)),
+                    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 255, 0)),
+                    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0))
+                })
+            },
+            guide
+        )
+
+        local okButton = MakeButton(
+            LightPicker,
+            "OK",
+            UDim2.fromOffset(42, 48),
+            UDim2.fromOffset(302, 310)
+        )
+        okButton.ZIndex = 220
+        okButton.TextSize = 12
+
+        local cancelButton = MakeButton(
+            LightPicker,
+            "X",
+            UDim2.fromOffset(42, 34),
+            UDim2.fromOffset(302, 365)
+        )
+        cancelButton.ZIndex = 220
+        cancelButton.TextSize = 11
+
+        local wheelDragging = false
+        local wheelInput = nil
+        local brightnessDragging = false
+        local brightnessInput = nil
+
+        local function UpdateColorFromHSV()
+            local color = Color3.fromHSV(PickerHue, PickerSat, PickerVal)
+            local r = math.floor(color.R * 255 + 0.5)
+            local g = math.floor(color.G * 255 + 0.5)
+            local b = math.floor(color.B * 255 + 0.5)
+
+            -- Atualiza somente a seleção/prévia. A LUZ real só muda no OK.
+            SHADER_CONFIG.Light.R = r
+            SHADER_CONFIG.Light.G = g
+            SHADER_CONFIG.Light.B = b
+
+            marker.BackgroundColor3 = color
+            markerInner.BackgroundColor3 = color
+            preview.BackgroundColor3 = color
+            brightnessKnob.BackgroundColor3 = color
+
+            local angle = PickerHue * math.pi * 2 - math.pi / 2
+            local markerRadius = PickerSat * (wheelRadius - 10)
+            local markerX = math.cos(angle) * markerRadius
+            local markerY = math.sin(angle) * markerRadius
+
+            if PickerSat <= 0.001 then
+                markerX = 0
+                markerY = 0
+            end
+
+            marker.Position = UDim2.new(0.5, markerX, 0.5, markerY)
+
+            brightness.BackgroundColor3 = Color3.fromHSV(PickerHue, PickerSat, 1)
+            brightnessKnob.Position = UDim2.new(PickerVal, 0, 0.5, 0)
+
+            info.Text = string.format(
+                "HEX: %s    RGB: %d, %d, %d",
+                ColorToHex(color), r, g, b
+            )
         end
-    end)
 
-    brightnessHit.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            brightnessDragging = true
-            brightnessInput = input
-            SetBrightnessFromPosition(input.Position)
+        local function SetWheelFromPosition(inputPosition)
+            local pos = wheel.AbsolutePosition
+            local size = wheel.AbsoluteSize
+            local center = pos + size / 2
+            local dx = inputPosition.X - center.X
+            local dy = inputPosition.Y - center.Y
+            local distance = math.sqrt(dx * dx + dy * dy)
+            local maxDistance = wheelRadius - 2
+            local limitedDistance = math.min(distance, maxDistance)
+
+            if distance > 0.001 then
+                local angle = math.atan2(dy, dx)
+                PickerHue = (angle / (math.pi * 2) + 0.25) % 1
+            end
+
+            PickerSat = math.clamp(limitedDistance / maxDistance, 0, 1)
+            UpdateColorFromHSV()
         end
-    end)
 
-    UserInputService.InputChanged:Connect(function(input)
-        if wheelDragging then
-            if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input == wheelInput then
+        local function SetBrightnessFromPosition(inputPosition)
+            local pos = brightness.AbsolutePosition
+            local size = brightness.AbsoluteSize
+            PickerVal = math.clamp((inputPosition.X - pos.X) / size.X, 0, 1)
+            UpdateColorFromHSV()
+        end
+
+        wheel.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch
+            or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                wheelDragging = true
+                wheelInput = input
                 SetWheelFromPosition(input.Position)
             end
-        end
+        end)
 
-        if brightnessDragging then
-            if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input == brightnessInput then
+        brightnessHit.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch
+            or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                brightnessDragging = true
+                brightnessInput = input
                 SetBrightnessFromPosition(input.Position)
             end
-        end
-    end)
+        end)
 
-    UserInputService.InputEnded:Connect(function(input)
-        if wheelInput and (
-            input == wheelInput
-            or (wheelInput.UserInputType == Enum.UserInputType.MouseButton1
-                and input.UserInputType == Enum.UserInputType.MouseButton1)
-        ) then
-            wheelDragging = false
-            wheelInput = nil
-        end
+        UserInputService.InputChanged:Connect(function(input)
+            if wheelDragging and (input == wheelInput or input.UserInputType == Enum.UserInputType.MouseMovement) then
+                SetWheelFromPosition(input.Position)
+            end
+            if brightnessDragging and (input == brightnessInput or input.UserInputType == Enum.UserInputType.MouseMovement) then
+                SetBrightnessFromPosition(input.Position)
+            end
+        end)
 
-        if brightnessInput and (
-            input == brightnessInput
-            or (brightnessInput.UserInputType == Enum.UserInputType.MouseButton1
-                and input.UserInputType == Enum.UserInputType.MouseButton1)
-        ) then
-            brightnessDragging = false
-            brightnessInput = nil
-        end
-    end)
+        UserInputService.InputEnded:Connect(function(input)
+            if input == wheelInput or (wheelInput and wheelInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1) then
+                wheelDragging = false
+                wheelInput = nil
+            end
+            if input == brightnessInput or (brightnessInput and brightnessInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1) then
+                brightnessDragging = false
+                brightnessInput = nil
+            end
+        end)
 
-    close.Activated:Connect(function()
-        LightPicker.Visible = false
-        LightPickerOpen = false
-    end)
+        close.Activated:Connect(function()
+            if PickerOriginalLight then
+                SHADER_CONFIG.Light.R = PickerOriginalLight.R
+                SHADER_CONFIG.Light.G = PickerOriginalLight.G
+                SHADER_CONFIG.Light.B = PickerOriginalLight.B
+            end
+            LightColorButton.BackgroundColor3 = GetLightColor()
+            LightPicker.Visible = false
+            LightPickerOpen = false
+        end)
 
-    okButton.Activated:Connect(function()
-        LightPicker.Visible = false
-        LightPickerOpen = false
-        SaveSettings()
-    end)
+        cancelButton.Activated:Connect(function()
+            if PickerOriginalLight then
+                SHADER_CONFIG.Light.R = PickerOriginalLight.R
+                SHADER_CONFIG.Light.G = PickerOriginalLight.G
+                SHADER_CONFIG.Light.B = PickerOriginalLight.B
+            end
+            LightColorButton.BackgroundColor3 = GetLightColor()
+            LightPicker.Visible = false
+            LightPickerOpen = false
+        end)
 
-    cancelButton.Activated:Connect(function()
-        LightPicker.Visible = false
-        LightPickerOpen = false
-    end)
+        okButton.Activated:Connect(function()
+            LightColorButton.BackgroundColor3 = GetLightColor()
+            ApplySelectedLightColor()
+            LightPicker.Visible = false
+            LightPickerOpen = false
+        end)
 
-    UpdateColorFromHSV(false)
+        -- Mantém uma referência segura para atualizar a prévia ao reabrir.
+        PickerUpdate = UpdateColorFromHSV
+        LightPicker:SetAttribute("SKYLARP_ColorPickerReady", true)
+    end
+
+    PickerOriginalLight = {
+        R = SHADER_CONFIG.Light.R,
+        G = SHADER_CONFIG.Light.G,
+        B = SHADER_CONFIG.Light.B
+    }
+
+    local current = GetLightColor()
+    PickerHue, PickerSat, PickerVal = Color3.toHSV(current)
+
+    if PickerUpdate then
+        PickerUpdate()
+    end
+
+    LightColorButton.BackgroundColor3 = current
+    LightPicker.Visible = true
     LightPickerOpen = true
 end
+
+LightColorButton.Activated:Connect(OpenLightPicker)
 
 
 -- HD NUMERIC INPUT
 --==================================================--
 
-function CreateHDNumber(
+local function CreateHDNumber(
     label,
     group,
     key,
@@ -5061,7 +4673,7 @@ end
 -- SLIDERS HD GRAPHICS
 --==================================================--
 
-function CreateHDSlider(label, group, key, min, max, decimals)
+local function CreateHDSlider(label, group, key, min, max, decimals)
     decimals = decimals or 2
 
     local row = Create(
@@ -5556,7 +5168,7 @@ Create(
     HUD
 )
 
-FPSLabel =
+local FPSLabel =
     Create(
         "TextLabel",
         {
@@ -5596,7 +5208,7 @@ FPSLabel =
         HUD
     )
 
-MSLabel =
+local MSLabel =
     Create(
         "TextLabel",
         {
@@ -5642,7 +5254,7 @@ MSLabel =
 -- OPEN BUTTON
 --==================================================--
 
-OpenButton =
+local OpenButton =
     Create(
         "TextButton",
         {
@@ -5697,105 +5309,51 @@ AddStroke(OpenButton, 0.3)
 -- MAIN BUTTONS
 --==================================================--
 
-FPSBoostButton =
+local FPSBoostButton =
     MakeButton(
         MainContent,
         "FPS BOOST",
         UDim2.new(1, 0, 0, 50),
-        UDim2.new(0, 0, 0, 0)
+        UDim2.new()
     )
 
-StretcherButton =
+local StretcherButton =
     MakeButton(
         MainContent,
         "STRETCHER",
         UDim2.new(1, 0, 0, 50),
-        UDim2.new(0, 0, 0, 0)
+        UDim2.new()
     )
 
-SkySelectorButton =
+local SkySelectorButton =
     MakeButton(
         MainContent,
         "SKY SELECTOR",
         UDim2.new(1, 0, 0, 50),
-        UDim2.new(0, 0, 0, 0)
+        UDim2.new()
     )
 
-HDGraphicsButton =
+local HDGraphicsButton =
     MakeButton(
         MainContent,
         "HD GRAPHICS",
         UDim2.new(1, 0, 0, 50),
-        UDim2.new(0, 0, 0, 0)
+        UDim2.new()
     )
 
-CloseButton =
+local CloseButton =
     MakeButton(
         MainContent,
         "FECHAR MENU",
         UDim2.new(1, 0, 0, 50),
-        UDim2.new(0, 0, 0, 0)
+        UDim2.new()
     )
-
-InterfacePartsMap = {
-    MAIN_BASE = Main,
-    FPS_BOOST = FPSBoostButton,
-    STRETCHER = StretcherButton,
-    SKY_SELECTOR = SkySelectorButton,
-    HD_GRAPHICS = HDGraphicsButton,
-    CLOSE_BUTTON = CloseButton,
-    SETTINGS_BUTTON = SettingsButton,
-    FPS_PANEL = BoostPanel,
-    STRETCH_PANEL = StretchPanel,
-    SKY_PANEL = SkyPanel,
-    HD_PANEL = HDPanel,
-    SETTINGS_PANEL = SettingsPanel,
-    HUD = HUD,
-    OPEN_BUTTON = OpenButton
-}
-
-for id, object in pairs(InterfacePartsMap) do
-    InterfaceParts[id] = object
-    if object then
-        InterfacePartDefaults[id] = {
-            SizeX = object.Size.X.Offset, SizeY = object.Size.Y.Offset,
-            PosX = object.Position.X.Offset, PosY = object.Position.Y.Offset,
-            BackgroundColor = Color3ToTable(object.BackgroundColor3),
-            TextColor = Color3ToTable(GetGuiTextColor(object)),
-            BackgroundTransparency = object.BackgroundTransparency
-        }
-    end
-end
-
-for id, values in pairs(SavedInterfaceParts) do
-    local obj = InterfaceParts[id]
-    if obj and type(values) == "table" then
-        if type(values.SizeX) == "number" and type(values.SizeY) == "number" then
-            obj.Size = UDim2.fromOffset(math.max(40, values.SizeX), math.max(25, values.SizeY))
-        end
-        if type(values.PosX) == "number" and type(values.PosY) == "number" then
-            obj.Position = UDim2.fromOffset(values.PosX, values.PosY)
-        end
-        local bg = TableToColor3(values.BackgroundColor)
-        local tc = TableToColor3(values.TextColor)
-        if bg and obj:IsA("GuiObject") then obj.BackgroundColor3 = bg end
-        if tc and (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then obj.TextColor3 = tc end
-        if type(values.BackgroundTransparency) == "number" then obj.BackgroundTransparency = math.clamp(values.BackgroundTransparency,0,1) end
-        InterfacePartSettings[id] = {
-            SizeX=obj.Size.X.Offset, SizeY=obj.Size.Y.Offset,
-            PosX=obj.Position.X.Offset, PosY=obj.Position.Y.Offset,
-            BackgroundColor=Color3ToTable(obj.BackgroundColor3),
-            TextColor=Color3ToTable(GetGuiTextColor(obj)),
-            BackgroundTransparency=obj.BackgroundTransparency
-        }
-    end
-end
 
 --==================================================--
 -- NAVIGATION
 --==================================================--
 
-function HideAllPanels()
+local function HideAllPanels()
 
     -- Garante que o slider nunca continue ativo
     StopStretchDragging()
@@ -5805,78 +5363,39 @@ function HideAllPanels()
     StretchPanel.Visible = false
     SkyPanel.Visible = false
     HDPanel.Visible = false
-    SettingsPanel.Visible = false
-    InterfaceEditorPanel.Visible = false
-    InterfaceColorPanel.Visible = false
 end
 
-function ShowMain()
+local function ShowMain()
 
     HideAllPanels()
     Main.Visible = true
 end
 
-function ShowBoost()
+local function ShowBoost()
 
     HideAllPanels()
     BoostPanel.Visible = true
 end
 
-function ShowStretch()
+local function ShowStretch()
 
     HideAllPanels()
     StretchPanel.Visible = true
 end
 
-function ShowSky()
+local function ShowSky()
 
     HideAllPanels()
     SkyPanel.Visible = true
 end
 
-function ShowHD()
+local function ShowHD()
 
     HideAllPanels()
     HDPanel.Visible = true
 end
 
-function ShowSettings()
-
-    HideAllPanels()
-    SettingsPanel.Visible = true
-end
-
-function RefreshEditorList()
-    for _, child in ipairs(PartList:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
-    end
-    local ids = {}
-    for id in pairs(InterfaceParts) do table.insert(ids,id) end
-    table.sort(ids)
-    for i,id in ipairs(ids) do
-        local b = MakeButton(PartList, (id == SelectedInterfacePartID and "● " or "○ ") .. id, UDim2.new(1,-2,0,26), UDim2.new(0, 0, 0, 0))
-        b.LayoutOrder=i; b.TextSize=11; b.ZIndex=82
-        b.Activated:Connect(function() SelectedInterfacePartID=id; PartIdValue.Text=id; RefreshEditorList(); end)
-    end
-    task.defer(function() PartList.CanvasSize=UDim2.fromOffset(0, PartListLayout.AbsoluteContentSize.Y+10) end)
-end
-
-function RefreshEditorValues()
-    local obj = InterfaceParts[SelectedInterfacePartID]
-    if not obj then return end
-    EditorValues.Text = string.format("Tamanho: %d x %d\nPosição: %d, %d", obj.Size.X.Offset, obj.Size.Y.Offset, obj.Position.X.Offset, obj.Position.Y.Offset)
-end
-
-function ShowInterfaceEditor()
-    HideAllPanels()
-    InterfaceEditorPanel.Visible = true
-    InterfaceColorPanel.Visible = false
-    PartIdValue.Text = SelectedInterfacePartID
-    RefreshEditorList()
-    RefreshEditorValues()
-end
-
-function CloseMenu()
+local function CloseMenu()
 
     HideAllPanels()
 
@@ -5884,7 +5403,7 @@ function CloseMenu()
     OpenButton.Visible = true
 end
 
-function OpenMenu()
+local function OpenMenu()
 
     HideAllPanels()
 
@@ -5906,357 +5425,12 @@ SkyBack.Activated:Connect(ShowMain)
 HDBack.Activated:Connect(ShowMain)
 
 OpenButton.Activated:Connect(OpenMenu)
-SettingsButton.Activated:Connect(ShowSettings)
-SettingsBack.Activated:Connect(ShowMain)
-
---==================================================--
--- INTERFACE SCALE / RESET CONFIG
---==================================================--
-
-InterfaceObjects = {
-    Main,
-    SettingsPanel,
-    BoostPanel,
-    StretchPanel,
-    SkyPanel,
-    HDPanel,
-    HUD,
-    OpenButton,
-    InterfaceEditorPanel,
-    InterfaceColorPanel
-}
-
-InterfaceScales = {}
-for _, object in ipairs(InterfaceObjects) do
-    local scaleObject = Instance.new("UIScale")
-    scaleObject.Scale = 1
-    scaleObject.Parent = object
-    InterfaceScales[object] = scaleObject
-end
-
-function UpdateInterfaceScale()
-
-    local viewport = Vector2.new(0, 0)
-    pcall(function()
-        viewport = Workspace.CurrentCamera.ViewportSize
-    end)
-
-    local effective = InterfaceScale
-
-    if InterfaceAutoFit and viewport.X > 0 and viewport.Y > 0 then
-        -- O maior painel é o HD Graphics (310x500).
-        local fitX = (viewport.X - 12) / 310
-        local fitY = (viewport.Y - 12) / 500
-        effective = math.min(effective, fitX, fitY)
-    end
-
-    effective = math.clamp(effective, 0.55, 1.30)
-
-    for object, scaleObject in pairs(InterfaceScales) do
-        if object and object.Parent then
-            scaleObject.Scale = effective
-        end
-    end
-
-    InterfaceSizeLabel.Text =
-        "TAMANHO DA GUI: " .. tostring(math.floor(InterfaceScale * 100 + 0.5)) .. "%"
-
-    AutoFitButton.Text = InterfaceAutoFit and "AUTO: ON" or "AUTO: OFF"
-end
-
-ClampInterfaceObject = function(object)
-
-    if not object or not object.Parent or not object.Visible then
-        return
-    end
-
-    local viewport = Vector2.new(0, 0)
-    pcall(function()
-        viewport = Workspace.CurrentCamera.ViewportSize
-    end)
-
-    if viewport.X <= 0 or viewport.Y <= 0 then
-        return
-    end
-
-    local size = object.AbsoluteSize
-    local parent = object.Parent
-
-    -- Partes dentro de outro Frame devem ficar dentro do próprio Frame.
-    if parent and parent:IsA("GuiObject") then
-        local parentSize = parent.AbsoluteSize
-        local parentScale = 1
-        local parentUIScale = parent:FindFirstChildOfClass("UIScale")
-        if parentUIScale then parentScale = math.max(0.01, parentUIScale.Scale) end
-
-        local maxX = math.max(0, (parentSize.X - size.X) / parentScale)
-        local maxY = math.max(0, (parentSize.Y - size.Y) / parentScale)
-        object.Position = UDim2.fromOffset(
-            math.clamp(object.Position.X.Offset, 0, maxX),
-            math.clamp(object.Position.Y.Offset, 0, maxY)
-        )
-        return
-    end
-
-    local maxX = math.max(0, viewport.X - size.X - 2)
-    local maxY = math.max(0, viewport.Y - size.Y - 2)
-
-    object.Position = UDim2.fromOffset(
-        math.clamp(object.Position.X.Offset, 2, maxX),
-        math.clamp(object.Position.Y.Offset, 2, maxY)
-    )
-end
-
-function ClampAllInterface()
-    for _, object in ipairs(InterfaceObjects) do
-        ClampInterfaceObject(object)
-    end
-end
-
-function CaptureInterfacePart(id)
-    local obj = InterfaceParts[id]
-    if not obj then return end
-    InterfacePartSettings[id] = {
-        SizeX=obj.Size.X.Offset, SizeY=obj.Size.Y.Offset,
-        PosX=obj.Position.X.Offset, PosY=obj.Position.Y.Offset,
-        BackgroundColor=Color3ToTable(obj.BackgroundColor3),
-        TextColor=Color3ToTable(GetGuiTextColor(obj)),
-        BackgroundTransparency=obj.BackgroundTransparency
-    }
-end
-
-function CaptureAllInterfaceParts()
-    for id in pairs(InterfaceParts) do CaptureInterfacePart(id) end
-end
-
-function ApplyEditorDelta(dx, dy, dw, dh)
-    local obj = InterfaceParts[SelectedInterfacePartID]
-    if not obj then return end
-    local minW, minH = 40, 25
-    local newW = math.max(minW, obj.Size.X.Offset + (dw or 0))
-    local newH = math.max(minH, obj.Size.Y.Offset + (dh or 0))
-    obj.Size = UDim2.fromOffset(newW, newH)
-    obj.Position = UDim2.fromOffset(obj.Position.X.Offset + (dx or 0), obj.Position.Y.Offset + (dy or 0))
-    ClampInterfaceObject(obj)
-    CaptureInterfacePart(SelectedInterfacePartID)
-    RefreshEditorValues()
-    SaveSettings()
-end
-
-SizeXMinus.Activated:Connect(function() ApplyEditorDelta(0,0,-10,0) end)
-SizeXPlus.Activated:Connect(function() ApplyEditorDelta(0,0,10,0) end)
-SizeYMinus.Activated:Connect(function() ApplyEditorDelta(0,0,0,-10) end)
-SizeYPlus.Activated:Connect(function() ApplyEditorDelta(0,0,0,10) end)
-PosXMinus.Activated:Connect(function() ApplyEditorDelta(-10,0,0,0) end)
-PosXPlus.Activated:Connect(function() ApplyEditorDelta(10,0,0,0) end)
-PosYMinus.Activated:Connect(function() ApplyEditorDelta(0,-10,0,0) end)
-PosYPlus.Activated:Connect(function() ApplyEditorDelta(0,10,0,0) end)
-
-ResetPartButton.Activated:Connect(function()
-    local obj = InterfaceParts[SelectedInterfacePartID]
-    local d = InterfacePartDefaults[SelectedInterfacePartID]
-    if obj and d then
-        obj.Size = UDim2.fromOffset(d.SizeX,d.SizeY)
-        obj.Position = UDim2.fromOffset(d.PosX,d.PosY)
-        local bg = TableToColor3(d.BackgroundColor)
-        local tc = TableToColor3(d.TextColor)
-        if bg then obj.BackgroundColor3 = bg end
-        if tc and (obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox")) then obj.TextColor3 = tc end
-        if type(d.BackgroundTransparency) == "number" then obj.BackgroundTransparency = d.BackgroundTransparency end
-        ClampInterfaceObject(obj)
-        CaptureInterfacePart(SelectedInterfacePartID)
-        RefreshEditorValues()
-        SaveSettings()
-    end
-end)
-
-SavePartButton.Activated:Connect(function()
-    local obj = InterfaceParts[SelectedInterfacePartID]
-    if obj then
-        CaptureInterfacePart(SelectedInterfacePartID)
-        SaveSettings()
-        SavePartButton.Text = "SALVO ✓"
-        task.delay(0.9,function() if SavePartButton.Parent then SavePartButton.Text="SALVAR PARTE" end end)
-    end
-end)
-
-EditorAutoClamp.Activated:Connect(function()
-    local obj = InterfaceParts[SelectedInterfacePartID]
-    if obj then ClampInterfaceObject(obj); CaptureInterfacePart(SelectedInterfacePartID); RefreshEditorValues(); SaveSettings() end
-end)
-
-SelectedColorTarget = "Background"
-
-function RefreshPartColorEditor()
-    local obj = InterfaceParts[SelectedInterfacePartID]
-    if not obj then return end
-    local color = obj.BackgroundColor3
-    if SelectedColorTarget == "Text" then color = GetGuiTextColor(obj) end
-    if typeof(color) ~= "Color3" then color = Color3.fromRGB(255,255,255) end
-    ColorRBox.Text = tostring(math.floor(color.R*255+0.5))
-    ColorGBox.Text = tostring(math.floor(color.G*255+0.5))
-    ColorBBox.Text = tostring(math.floor(color.B*255+0.5))
-    ColorPreview.BackgroundColor3 = color
-end
-
-function ShowPartColorEditor()
-    HideAllPanels()
-    InterfaceColorPanel.Visible = true
-    RefreshPartColorEditor()
-end
-
-function ReadRGBBoxes()
-    return math.clamp(math.floor(tonumber(ColorRBox.Text) or 255),0,255),
-           math.clamp(math.floor(tonumber(ColorGBox.Text) or 255),0,255),
-           math.clamp(math.floor(tonumber(ColorBBox.Text) or 255),0,255)
-end
-
-ColorTargetButton.Activated:Connect(function()
-    SelectedColorTarget = "Background"
-    RefreshPartColorEditor()
-end)
-
-TextColorTargetButton.Activated:Connect(function()
-    SelectedColorTarget = "Text"
-    RefreshPartColorEditor()
-end)
-
-ApplyPartColorButton.Activated:Connect(function()
-    local obj=InterfaceParts[SelectedInterfacePartID]
-    if not obj then return end
-    local r,g,b=ReadRGBBoxes()
-    local c=Color3.fromRGB(r,g,b)
-    if SelectedColorTarget=="Background" then
-        obj.BackgroundColor3=c
-    elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
-        obj.TextColor3=c
-    end
-    CaptureInterfacePart(SelectedInterfacePartID)
-    ColorPreview.BackgroundColor3=c
-    SaveSettings()
-end)
-
-ResetPartColorButton.Activated:Connect(function()
-    local obj=InterfaceParts[SelectedInterfacePartID]
-    local d=InterfacePartDefaults[SelectedInterfacePartID]
-    if not obj or not d then return end
-    local c=SelectedColorTarget=="Background" and TableToColor3(d.BackgroundColor) or TableToColor3(d.TextColor)
-    if c then
-        if SelectedColorTarget=="Background" then obj.BackgroundColor3=c
-        elseif obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then obj.TextColor3=c end
-    end
-    CaptureInterfacePart(SelectedInterfacePartID)
-    RefreshPartColorEditor()
-    SaveSettings()
-end)
-
-EditColorsButton.Activated:Connect(ShowPartColorEditor)
-InterfaceColorBack.Activated:Connect(ShowInterfaceEditor)
-
-InterfaceMinus.Activated:Connect(function()
-    InterfaceScale = math.clamp(InterfaceScale - 0.05, 0.70, 1.30)
-    UpdateInterfaceScale()
-    ClampAllInterface()
-    SaveSettings()
-end)
-
-InterfacePlus.Activated:Connect(function()
-    InterfaceScale = math.clamp(InterfaceScale + 0.05, 0.70, 1.30)
-    UpdateInterfaceScale()
-    ClampAllInterface()
-    SaveSettings()
-end)
-
-AutoFitButton.Activated:Connect(function()
-    InterfaceAutoFit = not InterfaceAutoFit
-    UpdateInterfaceScale()
-    ClampAllInterface()
-    SaveSettings()
-end)
-
-AutoSaveSettingsButton.Activated:Connect(function()
-    CONFIG.AutoSave = not CONFIG.AutoSave
-    AutoSaveSettingsButton.Text = CONFIG.AutoSave and "AUTO SAVE: ON" or "AUTO SAVE: OFF"
-    SaveSettings(true)
-end)
-
-SaveAllSettingsButton.Activated:Connect(function()
-    CaptureAllInterfaceParts()
-    SaveSettings(true)
-    SaveAllSettingsButton.Text = "CONFIGURAÇÕES SALVAS ✓"
-    task.delay(1.2, function()
-        if SaveAllSettingsButton and SaveAllSettingsButton.Parent then
-            SaveAllSettingsButton.Text = "SALVAR CONFIGURAÇÕES"
-        end
-    end)
-end)
-
-ModifyInterfaceButton.Activated:Connect(ShowInterfaceEditor)
-InterfaceEditorBack.Activated:Connect(ShowSettings)
-
-ResetConfigButton.Activated:Connect(function()
-
-    -- Remove o arquivo salvo e restaura os valores originais.
-    pcall(function()
-        if typeof(delfile) == "function" and isfile and isfile(CONFIG.SaveFile) then
-            delfile(CONFIG.SaveFile)
-        end
-    end)
-
-    pcall(function()
-        if SHADER_CONFIG.Enabled then
-            SetShaderEnabled(false)
-        end
-    end)
-
-    pcall(function()
-        SetStretchEnabled(false)
-    end)
-
-    RemoveCurrentSky()
-
-    CONFIG = DeepCopy(DEFAULT_CONFIG)
-    SHADER_CONFIG = DeepCopy(DEFAULT_SHADER_CONFIG)
-
-    StretchValue = CONFIG.StretchDefault
-    StretchEnabled = false
-    SkySelected = nil
-    InterfaceScale = 1.00
-    InterfaceAutoFit = true
-    CONFIG.AutoSave = DEFAULT_CONFIG.AutoSave
-
-    for id, obj in pairs(InterfaceParts) do
-        local d = InterfacePartDefaults[id]
-        if obj and d then
-            obj.Size = UDim2.fromOffset(d.SizeX,d.SizeY)
-            obj.Position = UDim2.fromOffset(d.PosX,d.PosY)
-        end
-    end
-    InterfacePartSettings = {}
-
-    SavedHUDPosition.X = 16
-    SavedHUDPosition.Y = 80
-
-    UpdateInterfaceScale()
-    ClampAllInterface()
-    SaveSettings()
-
-    ResetConfigButton.Text = "CONFIG RESTAURADA"
-    task.delay(1.2, function()
-        if ResetConfigButton and ResetConfigButton.Parent then
-            ResetConfigButton.Text = "REST CONFIG"
-        end
-    end)
-end)
-
-UpdateInterfaceScale()
-AutoSaveSettingsButton.Text = CONFIG.AutoSave and "AUTO SAVE: ON" or "AUTO SAVE: OFF"
 
 --==================================================--
 -- DRAG MOBILE
 --==================================================--
 
-function MakeDraggable(
+local function MakeDraggable(
     object,
     handle
 )
@@ -6319,8 +5493,6 @@ function MakeDraggable(
                     startPosition.Y.Offset
                     + delta.Y
                 )
-
-            ClampInterfaceObject(object)
         end
     )
 
@@ -6359,24 +5531,14 @@ MakeDraggable(BoostPanel, BoostHeader)
 MakeDraggable(StretchPanel, StretchTitle)
 MakeDraggable(SkyPanel, SkyTitle)
 MakeDraggable(HDPanel, HDTitle)
-MakeDraggable(SettingsPanel, SettingsTitle)
 MakeDraggable(HUD, HUD)
-
-ClampAllInterface()
-
-pcall(function()
-    Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-        UpdateInterfaceScale()
-        ClampAllInterface()
-    end)
-end)
 
 --==================================================--
 -- FPS
 --==================================================--
 
-FPSFrames = 0
-FPSAccumulator = 0
+local FPSFrames = 0
+local FPSAccumulator = 0
 
 RunService.RenderStepped:Connect(
     function(deltaTime)
@@ -6417,7 +5579,7 @@ RunService.RenderStepped:Connect(
 -- PING
 --==================================================--
 
-function GetPing()
+local function GetPing()
 
     local ping
 
@@ -6498,7 +5660,7 @@ task.spawn(
 -- CHARACTER / RESPAWN
 --==================================================--
 
-function RestoreSelectedSky()
+local function RestoreSelectedSky()
 
     if not SkySelected then
         return
@@ -6527,7 +5689,7 @@ function RestoreSelectedSky()
     end
 end
 
-function SetupCharacter(character)
+local function SetupCharacter(character)
 
     DisconnectList(
         CharacterConnections
