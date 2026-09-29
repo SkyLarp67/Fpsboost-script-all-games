@@ -55,6 +55,9 @@ local SHADER_CONFIG = {
     -- NOVO:
     -- Controle da iluminação do HD GRAPHICS
     LightEnabled = true,
+    -- Controla somente a cor personalizada da luz.
+    -- A cor escolhida continua salva mesmo quando estiver OFF.
+    LightColorEnabled = true,
 
     Light = {
         R = 255,
@@ -371,6 +374,10 @@ local function RestoreShaderSettings()
         SHADER_CONFIG.LightEnabled = data.LightEnabled
     end
 
+    if type(data.LightColorEnabled) == "boolean" then
+        SHADER_CONFIG.LightColorEnabled = data.LightColorEnabled
+    end
+
     if type(data.Light) == "table" then
 
         if type(data.Light.R) == "number" then
@@ -498,6 +505,9 @@ local function SaveSettings()
 
             LightEnabled =
                 SHADER_CONFIG.LightEnabled,
+
+            LightColorEnabled =
+                SHADER_CONFIG.LightColorEnabled,
 
             Light = {
                 R = SHADER_CONFIG.Light.R,
@@ -1468,6 +1478,8 @@ local ShaderOriginal = {
     Brightness = nil,
     Ambient = nil,
     OutdoorAmbient = nil,
+    ColorShiftTop = nil,
+    ColorShiftBottom = nil,
     EnvironmentDiffuseScale = nil,
     EnvironmentSpecularScale = nil,
     GlobalShadows = nil,
@@ -1493,6 +1505,12 @@ local function CaptureLighting()
 
     ShaderOriginal.OutdoorAmbient =
         SafeGet(Lighting, "OutdoorAmbient")
+
+    ShaderOriginal.ColorShiftTop =
+        SafeGet(Lighting, "ColorShift_Top")
+
+    ShaderOriginal.ColorShiftBottom =
+        SafeGet(Lighting, "ColorShift_Bottom")
 
     ShaderOriginal.EnvironmentDiffuseScale =
         SafeGet(
@@ -1585,26 +1603,47 @@ local function ApplyHDLight()
 
     if SHADER_CONFIG.LightEnabled then
 
-        -- Cor escolhida pelo usuário
-        SafeSet(
-            Lighting,
-            "Ambient",
-            RGB(
-                L.R,
-                L.G,
-                L.B
-            )
-        )
+        -- A luz continua ativa mesmo quando a COR estiver OFF.
+        -- COR OFF = usa as cores originais do Roblox, sem apagar a luz.
+        if SHADER_CONFIG.LightColorEnabled then
 
-        SafeSet(
-            Lighting,
-            "OutdoorAmbient",
-            RGB(
-                L.R,
-                L.G,
-                L.B
+            SafeSet(
+                Lighting,
+                "Ambient",
+                RGB(
+                    L.R,
+                    L.G,
+                    L.B
+                )
             )
-        )
+
+            SafeSet(
+                Lighting,
+                "OutdoorAmbient",
+                RGB(
+                    L.R,
+                    L.G,
+                    L.B
+                )
+            )
+
+        else
+
+            SafeSet(
+                Lighting,
+                "Ambient",
+                ShaderOriginal.Ambient
+                    or Color3.fromRGB(128, 128, 128)
+            )
+
+            SafeSet(
+                Lighting,
+                "OutdoorAmbient",
+                ShaderOriginal.OutdoorAmbient
+                    or Color3.fromRGB(128, 128, 128)
+            )
+
+        end
 
         SafeSet(
             Lighting,
@@ -1618,21 +1657,13 @@ local function ApplyHDLight()
         SafeSet(
             Lighting,
             "Ambient",
-            Color3.fromRGB(
-                0,
-                0,
-                0
-            )
+            Color3.fromRGB(0, 0, 0)
         )
 
         SafeSet(
             Lighting,
             "OutdoorAmbient",
-            Color3.fromRGB(
-                0,
-                0,
-                0
-            )
+            Color3.fromRGB(0, 0, 0)
         )
 
         SafeSet(
@@ -3909,9 +3940,9 @@ local function CreateHDToggle(
             SHADER_CONFIG[key] =
                 not SHADER_CONFIG[key]
 
-            -- Sempre reaplica: ao desligar o SHADER,
-            -- ApplyShaders() remove os efeitos personalizados.
-            ApplyShaders()
+            if SHADER_CONFIG.Enabled then
+                ApplyShaders()
+            end
 
             Refresh()
             SaveSettings()
@@ -3924,39 +3955,27 @@ local function CreateHDToggle(
 end
 
 --==================================================--
--- CONTROLE PRINCIPAL DO SHADER
---==================================================--
-
--- Este é o interruptor geral do HD GRAPHICS.
--- Ele fica no topo da lista, antes de LUZ/BLOOM/BLUR.
-local ShaderToggle =
-    CreateHDToggle(
-        "SHADER",
-        "Enabled"
-    )
-
---==================================================--
 -- NOVA FUNÇÃO: TOGGLE DA LUZ
 --==================================================--
-
--- Declarações antecipadas: o botão da luz usa estas funções antes
--- da implementação completa do seletor de cores.
-local GetLightColor
-local OpenLightPicker
-
-GetLightColor = function()
-    return RGB(
-        SHADER_CONFIG.Light.R,
-        SHADER_CONFIG.Light.G,
-        SHADER_CONFIG.Light.B
-    )
-end
 
 local LightToggle =
     CreateHDToggle(
         "LUZ",
         "LightEnabled"
     )
+
+-- Forward declaration do picker para o botão poder ser criado antes dele.
+local OpenLightPicker
+
+-- Cor atual da luz. Declarada antes do botão para evitar referência
+-- a função ainda não inicializada durante a criação da interface.
+local function GetLightColor()
+    return RGB(
+        SHADER_CONFIG.Light.R,
+        SHADER_CONFIG.Light.G,
+        SHADER_CONFIG.Light.B
+    )
+end
 
 -- Botão de cor fica diretamente dentro do botão LUZ.
 -- Assim não ocupa uma linha separada no HD GRAPHICS.
@@ -3993,23 +4012,64 @@ Create(
     LightColorButton
 )
 
--- A conexão é feita depois que OpenLightPicker for definido.
+-- Botão separado para desligar SOMENTE a cor personalizada.
+-- A cor escolhida continua salva e pode ser religada depois.
+local LightColorToggle = Create(
+    "TextButton",
+    {
+        Size = UDim2.fromOffset(34, 23),
+        Position = UDim2.new(1, -132, 0.5, -11),
+        BackgroundColor3 = Color3.fromRGB(65, 120, 80),
+        BorderSizePixel = 0,
+        Text = "COR",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 8,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = false,
+        ZIndex = 20,
+        Active = true
+    },
+    LightToggle
+)
+AddCorner(LightColorToggle, 6)
+
+local function RefreshLightColorToggle()
+    if SHADER_CONFIG.LightColorEnabled then
+        LightColorToggle.Text = "COR"
+        LightColorToggle.BackgroundColor3 = Color3.fromRGB(65, 120, 80)
+    else
+        LightColorToggle.Text = "COR OFF"
+        LightColorToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 68)
+    end
+end
+
+LightColorToggle.Activated:Connect(function()
+    SHADER_CONFIG.LightColorEnabled = not SHADER_CONFIG.LightColorEnabled
+
+    if SHADER_CONFIG.Enabled and SHADER_CONFIG.LightEnabled then
+        ApplyHDLight()
+    end
+
+    RefreshLightColorToggle()
+    SaveSettings()
+end)
+
+LightColorButton.Activated:Connect(function()
+    OpenLightPicker()
+end)
+
+RefreshLightColorToggle()
 
 --==================================================--
 --==================================================--
 -- COLOR PICKER RGB 24-BIT
 -- 16.777.216 CORES POSSÍVEIS
--- RODA DE CORES + MARCADOR + PRÉVIA
--- A LUZ SÓ É APLICADA NO OK
+-- RODA COM MARCADOR LIVRE + BRILHO
+-- SEM PRÉVIA DA LUZ
 --==================================================--
 
 local LightPicker = nil
 local LightPickerOpen = false
-local PickerOriginalLight = nil
-local PickerHue = 0
-local PickerSat = 0
-local PickerVal = 1
-local PickerUpdate = nil
 
 local function RGBToHex(r, g, b)
     return string.format(
@@ -4029,478 +4089,505 @@ local function ColorToHex(color)
 end
 
 local function ApplySelectedLightColor()
-    if SHADER_CONFIG.Enabled and SHADER_CONFIG.LightEnabled then
+    if SHADER_CONFIG.Enabled
+    and SHADER_CONFIG.LightEnabled then
         ApplyHDLight()
     end
+
     SaveSettings()
 end
 
 OpenLightPicker = function()
-    if not LightPicker then
-        local pickerWidth = 360
-        local pickerHeight = 505
 
-        LightPicker = Create(
+    if LightPicker then
+        LightPicker.Visible = true
+        LightPickerOpen = true
+        return
+    end
+
+    local pickerWidth = 330
+    local pickerHeight = 500
+
+    LightPicker = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(pickerWidth, pickerHeight),
+            Position = UDim2.new(0.5, -pickerWidth / 2, 0.5, -pickerHeight / 2),
+            BackgroundColor3 = Color3.fromRGB(20, 20, 25),
+            BorderSizePixel = 0,
+            ZIndex = 200,
+            Active = true,
+            Visible = true
+        },
+        ScreenGui
+    )
+
+    AddCorner(LightPicker, 14)
+    AddStroke(LightPicker, 0.25)
+
+    local title = Create(
+        "TextLabel",
+        {
+            Size = UDim2.new(1, -70, 0, 34),
+            Position = UDim2.fromOffset(12, 8),
+            BackgroundTransparency = 1,
+            Text = "COR DA LUZ",
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextSize = 15,
+            Font = Enum.Font.GothamBold,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 201
+        },
+        LightPicker
+    )
+
+    local close = Create(
+        "TextButton",
+        {
+            Size = UDim2.fromOffset(34, 30),
+            Position = UDim2.new(1, -42, 0, 8),
+            BackgroundColor3 = Color3.fromRGB(42, 42, 50),
+            BorderSizePixel = 0,
+            Text = "×",
+            TextColor3 = Color3.fromRGB(240, 240, 245),
+            TextSize = 20,
+            Font = Enum.Font.GothamBold,
+            ZIndex = 202
+        },
+        LightPicker
+    )
+    AddCorner(close, 8)
+
+    --==================================================--
+    -- RODA DE CORES
+    -- ÂNGULO = MATIZ / DISTÂNCIA DO CENTRO = SATURAÇÃO
+    -- CENTRO = SATURAÇÃO 0 (BRANCO/NEUTRO)
+    --==================================================--
+
+    local wheelSize = 310
+    local wheelRadius = 149
+
+    local wheel = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(wheelSize, wheelSize),
+            Position = UDim2.fromOffset(18, 58),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            ZIndex = 201,
+            Active = true
+        },
+        LightPicker
+    )
+
+    -- Base circular de matiz. Vários raios formam a roda de cores.
+    for i = 0, 359 do
+        local hueValue = i / 360
+
+        local ray = Create(
             "Frame",
             {
-                Size = UDim2.fromOffset(pickerWidth, pickerHeight),
-                Position = UDim2.new(0.5, -pickerWidth / 2, 0.5, -pickerHeight / 2),
-                BackgroundColor3 = Color3.fromRGB(20, 20, 25),
-                BorderSizePixel = 0,
-                ZIndex = 200,
-                Active = true,
-                Visible = false
-            },
-            ScreenGui
-        )
-
-        AddCorner(LightPicker, 14)
-        AddStroke(LightPicker, 0.25)
-
-        Create(
-            "TextLabel",
-            {
-                Size = UDim2.new(1, -70, 0, 34),
-                Position = UDim2.fromOffset(12, 8),
-                BackgroundTransparency = 1,
-                Text = "COR DA LUZ",
-                TextColor3 = Color3.fromRGB(255, 255, 255),
-                TextSize = 15,
-                Font = Enum.Font.GothamBold,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 201
-            },
-            LightPicker
-        )
-
-        local close = Create(
-            "TextButton",
-            {
-                Size = UDim2.fromOffset(34, 30),
-                Position = UDim2.new(1, -42, 0, 8),
-                BackgroundColor3 = Color3.fromRGB(42, 42, 50),
-                BorderSizePixel = 0,
-                Text = "×",
-                TextColor3 = Color3.fromRGB(240, 240, 245),
-                TextSize = 20,
-                Font = Enum.Font.GothamBold,
-                ZIndex = 220
-            },
-            LightPicker
-        )
-        AddCorner(close, 8)
-
-        -- RODA: vários raios formam o espectro. O centro é branco,
-        -- a distância do centro controla a saturação.
-        local wheelSize = 270
-        local wheelRadius = 129
-
-        local wheel = Create(
-            "Frame",
-            {
-                Size = UDim2.fromOffset(wheelSize, wheelSize),
-                Position = UDim2.fromOffset(18, 58),
-                BackgroundTransparency = 1,
-                BorderSizePixel = 0,
-                ZIndex = 201,
-                Active = true,
-                ClipsDescendants = true
-            },
-            LightPicker
-        )
-
-        -- 180 segmentos: suficientemente suave no celular sem criar centenas
-        -- de objetos desnecessários.
-        for i = 0, 179 do
-            local hueValue = i / 180
-            Create(
-                "Frame",
-                {
-                    Size = UDim2.fromOffset(3, wheelRadius),
-                    Position = UDim2.new(0.5, 0, 0.5, 0),
-                    AnchorPoint = Vector2.new(0.5, 1),
-                    BackgroundColor3 = Color3.fromHSV(hueValue, 1, 1),
-                    BorderSizePixel = 0,
-                    Rotation = i * 2,
-                    ZIndex = 202,
-                    Active = false
-                },
-                wheel
-            )
-        end
-
-        -- Camadas brancas: centro branco -> borda saturada.
-        for i = 1, 24 do
-            local radius = wheelRadius * (i / 24)
-            local diameter = radius * 2
-            local transparency = 0.03 + ((i - 1) / 23) * 0.94
-            local fade = Create(
-                "Frame",
-                {
-                    Size = UDim2.fromOffset(diameter, diameter),
-                    Position = UDim2.new(0.5, -radius, 0.5, -radius),
-                    BackgroundColor3 = Color3.new(1, 1, 1),
-                    BackgroundTransparency = transparency,
-                    BorderSizePixel = 0,
-                    ZIndex = 203,
-                    Active = false
-                },
-                wheel
-            )
-            AddCorner(fade, radius)
-        end
-
-        local marker = Create(
-            "Frame",
-            {
-                Size = UDim2.fromOffset(24, 24),
-                AnchorPoint = Vector2.new(0.5, 0.5),
+                Size = UDim2.fromOffset(3, wheelRadius),
                 Position = UDim2.new(0.5, 0, 0.5, 0),
-                BackgroundColor3 = Color3.new(1, 1, 1),
+                AnchorPoint = Vector2.new(0.5, 1),
+                BackgroundColor3 = Color3.fromHSV(hueValue, 1, 1),
                 BorderSizePixel = 0,
-                ZIndex = 215,
+                Rotation = i,
+                ZIndex = 202,
                 Active = false
             },
             wheel
         )
-        AddCorner(marker, 12)
-        local markerStroke = AddStroke(marker, 0)
-        markerStroke.Thickness = 3
-        markerStroke.Color = Color3.fromRGB(15, 15, 18)
+    end
 
-        local markerInner = Create(
+    -- Suaviza a saturação: o centro fica branco e a cor aparece
+    -- progressivamente até a borda.
+    for i = 1, 22 do
+        local radius = wheelRadius * (i / 22)
+        local diameter = radius * 2
+        local transparency = 0.04 + ((i - 1) / 21) * 0.92
+
+        local fade = Create(
             "Frame",
             {
-                Size = UDim2.fromOffset(10, 10),
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                Position = UDim2.fromScale(0.5, 0.5),
+                Size = UDim2.fromOffset(diameter, diameter),
+                Position = UDim2.new(0.5, -radius, 0.5, -radius),
                 BackgroundColor3 = Color3.new(1, 1, 1),
+                BackgroundTransparency = transparency,
                 BorderSizePixel = 0,
-                ZIndex = 216,
+                ZIndex = 203,
                 Active = false
             },
-            marker
+            wheel
         )
-        AddCorner(markerInner, 5)
+        AddCorner(fade, radius)
+    end
 
-        -- PRÉVIA GRANDE DA COR ESCOLHIDA.
-        local preview = Create(
-            "Frame",
-            {
-                Size = UDim2.fromOffset(42, 42),
-                Position = UDim2.fromOffset(302, 58),
-                BackgroundColor3 = Color3.new(1, 1, 1),
-                BorderSizePixel = 0,
-                ZIndex = 205
-            },
-            LightPicker
-        )
-        AddCorner(preview, 10)
-        local previewStroke = AddStroke(preview, 0)
-        previewStroke.Thickness = 2
-        previewStroke.Color = Color3.fromRGB(255, 255, 255)
+    -- Marcador: pode ficar em QUALQUER ponto da roda, inclusive no centro.
+    local marker = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(24, 24),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+            BackgroundColor3 = GetLightColor(),
+            BorderSizePixel = 0,
+            ZIndex = 210,
+            Active = false
+        },
+        wheel
+    )
+    AddCorner(marker, 12)
+    local markerStroke = AddStroke(marker, 0)
+    markerStroke.Thickness = 3
+    markerStroke.Color = Color3.fromRGB(15, 15, 18)
 
-        Create(
-            "TextLabel",
-            {
-                Size = UDim2.fromOffset(42, 16),
-                Position = UDim2.fromOffset(302, 104),
-                BackgroundTransparency = 1,
-                Text = "PRÉVIA",
-                TextColor3 = Color3.fromRGB(190, 190, 200),
-                TextSize = 8,
-                Font = Enum.Font.GothamBold,
-                TextXAlignment = Enum.TextXAlignment.Center,
-                ZIndex = 205
-            },
-            LightPicker
-        )
+    local markerInner = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(10, 10),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            ZIndex = 211,
+            Active = false
+        },
+        marker
+    )
+    AddCorner(markerInner, 5)
 
-        local brightnessLabel = Create(
-            "TextLabel",
-            {
-                Size = UDim2.fromOffset(270, 18),
-                Position = UDim2.fromOffset(18, 326),
-                BackgroundTransparency = 1,
-                Text = "BRILHO",
-                TextColor3 = Color3.fromRGB(190, 190, 200),
-                TextSize = 10,
-                Font = Enum.Font.GothamBold,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 205
-            },
-            LightPicker
-        )
+    --==================================================--
+    -- BRILHO
+    --==================================================--
 
-        local brightness = Create(
-            "Frame",
-            {
-                Size = UDim2.fromOffset(270, 18),
-                Position = UDim2.fromOffset(18, 350),
-                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                BorderSizePixel = 0,
-                ZIndex = 205,
-                Active = true
-            },
-            LightPicker
-        )
-        AddCorner(brightness, 9)
+    local brightnessLabel = Create(
+        "TextLabel",
+        {
+            Size = UDim2.fromOffset(290, 18),
+            Position = UDim2.fromOffset(20, 360),
+            BackgroundTransparency = 1,
+            Text = "BRILHO",
+            TextColor3 = Color3.fromRGB(190, 190, 200),
+            TextSize = 10,
+            Font = Enum.Font.GothamBold,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 205
+        },
+        LightPicker
+    )
 
-        local brightnessHit = Create(
-            "TextButton",
-            {
-                Size = UDim2.fromScale(1, 1),
-                BackgroundTransparency = 1,
-                BorderSizePixel = 0,
-                Text = "",
-                AutoButtonColor = false,
-                ZIndex = 206,
-                Active = true
-            },
-            brightness
-        )
+    local brightness = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(330, 18),
+            Position = UDim2.fromOffset(18, 386),
+            BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+            BorderSizePixel = 0,
+            ZIndex = 205,
+            Active = true
+        },
+        LightPicker
+    )
+    AddCorner(brightness, 9)
 
-        local brightnessKnob = Create(
-            "Frame",
-            {
-                Size = UDim2.fromOffset(20, 20),
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                Position = UDim2.new(1, 0, 0.5, 0),
-                BackgroundColor3 = Color3.new(1, 1, 1),
-                BorderSizePixel = 0,
-                ZIndex = 208,
-                Active = false
-            },
-            brightness
-        )
-        AddCorner(brightnessKnob, 10)
-        local brightnessStroke = AddStroke(brightnessKnob, 0)
-        brightnessStroke.Thickness = 2
-        brightnessStroke.Color = Color3.fromRGB(15, 15, 18)
+    local brightnessGradient = Create(
+        "UIGradient",
+        {
+            Rotation = 0,
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
+                ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
+            })
+        },
+        brightness
+    )
 
-        local info = Create(
-            "TextLabel",
-            {
-                Size = UDim2.fromOffset(270, 20),
-                Position = UDim2.fromOffset(18, 378),
-                BackgroundTransparency = 1,
-                Text = "HEX: #FFFFFF    RGB: 255, 255, 255",
-                TextColor3 = Color3.fromRGB(220, 220, 228),
-                TextSize = 10,
-                Font = Enum.Font.GothamMedium,
-                TextXAlignment = Enum.TextXAlignment.Left,
-                ZIndex = 205
-            },
-            LightPicker
-        )
+    local brightnessHit = Create(
+        "TextButton",
+        {
+            Size = UDim2.fromScale(1, 1),
+            Position = UDim2.fromScale(0, 0),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false,
+            ZIndex = 206,
+            Active = true
+        },
+        brightness
+    )
 
-        -- Guia de matiz semelhante à referência enviada.
-        local guide = Create(
-            "Frame",
-            {
-                Size = UDim2.fromOffset(42, 170),
-                Position = UDim2.fromOffset(302, 128),
-                BackgroundColor3 = Color3.fromRGB(35, 35, 42),
-                BorderSizePixel = 0,
-                ZIndex = 204
-            },
-            LightPicker
-        )
-        AddCorner(guide, 8)
-        Create(
-            "UIGradient",
-            {
-                Rotation = 90,
-                Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
-                    ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 0, 255)),
-                    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 0, 255)),
-                    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
-                    ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 255, 0)),
-                    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 255, 0)),
-                    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0))
-                })
-            },
-            guide
-        )
+    local brightnessKnob = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(20, 20),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(1, 0, 0.5, 0),
+            BackgroundColor3 = GetLightColor(),
+            BorderSizePixel = 0,
+            ZIndex = 208,
+            Active = false
+        },
+        brightness
+    )
+    AddCorner(brightnessKnob, 10)
+    local brightnessStroke = AddStroke(brightnessKnob, 0)
+    brightnessStroke.Thickness = 2
+    brightnessStroke.Color = Color3.fromRGB(15, 15, 18)
 
-        local okButton = MakeButton(
-            LightPicker,
-            "OK",
-            UDim2.fromOffset(42, 48),
-            UDim2.fromOffset(302, 310)
-        )
-        okButton.ZIndex = 220
-        okButton.TextSize = 12
+    local info = Create(
+        "TextLabel",
+        {
+            Size = UDim2.fromOffset(330, 20),
+            Position = UDim2.fromOffset(18, 408),
+            BackgroundTransparency = 1,
+            Text = "HEX: #FFFFFF    RGB: 255, 255, 255",
+            TextColor3 = Color3.fromRGB(220, 220, 228),
+            TextSize = 10,
+            Font = Enum.Font.GothamMedium,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 205
+        },
+        LightPicker
+    )
 
-        local cancelButton = MakeButton(
-            LightPicker,
-            "X",
-            UDim2.fromOffset(42, 34),
-            UDim2.fromOffset(302, 365)
-        )
-        cancelButton.ZIndex = 220
-        cancelButton.TextSize = 11
+    -- A imagem enviada pelo usuário é usada como referência visual.
+    -- O guia abaixo é desenhado nativamente no Roblox para não depender
+    -- de um asset externo; se houver um ID de decal da imagem, ele pode
+    -- substituir este guia por um ImageLabel.
+    -- Guia visual lateral inspirado na roda enviada: as cores ficam
+    -- representadas por setores contínuos ao redor da paleta.
+    local guide = Create(
+        "Frame",
+        {
+            Size = UDim2.fromOffset(42, 220),
+            Position = UDim2.fromOffset(375, 86),
+            BackgroundColor3 = Color3.fromRGB(35, 35, 42),
+            BorderSizePixel = 0,
+            ZIndex = 204
+        },
+        LightPicker
+    )
+    AddCorner(guide, 8)
 
-        local wheelDragging = false
-        local wheelInput = nil
-        local brightnessDragging = false
-        local brightnessInput = nil
+    local guideGradient = Create(
+        "UIGradient",
+        {
+            Rotation = 90,
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+                ColorSequenceKeypoint.new(0.16, Color3.fromRGB(255, 0, 255)),
+                ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 0, 255)),
+                ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
+                ColorSequenceKeypoint.new(0.66, Color3.fromRGB(0, 255, 0)),
+                ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 255, 0)),
+                ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0))
+            })
+        },
+        guide
+    )
 
-        local function UpdateColorFromHSV()
-            local color = Color3.fromHSV(PickerHue, PickerSat, PickerVal)
-            local r = math.floor(color.R * 255 + 0.5)
-            local g = math.floor(color.G * 255 + 0.5)
-            local b = math.floor(color.B * 255 + 0.5)
+    local guideText = Create(
+        "TextLabel",
+        {
+            Size = UDim2.fromOffset(42, 42),
+            Position = UDim2.fromOffset(375, 42),
+            BackgroundTransparency = 1,
+            Text = "CORES",
+            TextColor3 = Color3.fromRGB(205, 205, 215),
+            TextSize = 9,
+            Font = Enum.Font.GothamBold,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            ZIndex = 205
+        },
+        LightPicker
+    )
 
-            -- Atualiza somente a seleção/prévia. A LUZ real só muda no OK.
-            SHADER_CONFIG.Light.R = r
-            SHADER_CONFIG.Light.G = g
-            SHADER_CONFIG.Light.B = b
+    local okButton = MakeButton(
+        LightPicker,
+        "OK",
+        UDim2.fromOffset(42, 48),
+        UDim2.fromOffset(375, 346)
+    )
+    okButton.ZIndex = 205
+    okButton.TextSize = 12
 
-            marker.BackgroundColor3 = color
-            markerInner.BackgroundColor3 = color
-            preview.BackgroundColor3 = color
-            brightnessKnob.BackgroundColor3 = color
+    local cancelButton = MakeButton(
+        LightPicker,
+        "X",
+        UDim2.fromOffset(42, 34),
+        UDim2.fromOffset(375, 398)
+    )
+    cancelButton.ZIndex = 205
+    cancelButton.TextSize = 11
 
-            local angle = PickerHue * math.pi * 2 - math.pi / 2
-            local markerRadius = PickerSat * (wheelRadius - 10)
-            local markerX = math.cos(angle) * markerRadius
-            local markerY = math.sin(angle) * markerRadius
+    local hue, sat, val = Color3.toHSV(GetLightColor())
 
-            if PickerSat <= 0.001 then
-                markerX = 0
-                markerY = 0
-            end
+    local function UpdateColorFromHSV(save)
+        local color = Color3.fromHSV(hue, sat, val)
+        local r = math.floor(color.R * 255 + 0.5)
+        local g = math.floor(color.G * 255 + 0.5)
+        local b = math.floor(color.B * 255 + 0.5)
 
-            marker.Position = UDim2.new(0.5, markerX, 0.5, markerY)
+        SHADER_CONFIG.Light.R = r
+        SHADER_CONFIG.Light.G = g
+        SHADER_CONFIG.Light.B = b
 
-            brightness.BackgroundColor3 = Color3.fromHSV(PickerHue, PickerSat, 1)
-            brightnessKnob.Position = UDim2.new(PickerVal, 0, 0.5, 0)
-
-            info.Text = string.format(
-                "HEX: %s    RGB: %d, %d, %d",
-                ColorToHex(color), r, g, b
-            )
+        marker.BackgroundColor3 = color
+        markerInner.BackgroundColor3 = color
+        brightnessKnob.BackgroundColor3 = color
+        if LightColorButton then
+            LightColorButton.BackgroundColor3 = color
         end
 
-        local function SetWheelFromPosition(inputPosition)
-            local pos = wheel.AbsolutePosition
-            local size = wheel.AbsoluteSize
-            local center = pos + size / 2
-            local dx = inputPosition.X - center.X
-            local dy = inputPosition.Y - center.Y
-            local distance = math.sqrt(dx * dx + dy * dy)
-            local maxDistance = wheelRadius - 2
-            local limitedDistance = math.min(distance, maxDistance)
+        -- Matiz + saturação: o marcador acompanha exatamente o ponto tocado.
+        local angle = hue * math.pi * 2 - math.pi / 2
+        local markerRadius = sat * (wheelRadius - 10)
+        local markerX = math.cos(angle) * markerRadius
+        local markerY = math.sin(angle) * markerRadius
 
-            if distance > 0.001 then
-                local angle = math.atan2(dy, dx)
-                PickerHue = (angle / (math.pi * 2) + 0.25) % 1
-            end
-
-            PickerSat = math.clamp(limitedDistance / maxDistance, 0, 1)
-            UpdateColorFromHSV()
+        if sat <= 0.001 then
+            markerX = 0
+            markerY = 0
         end
 
-        local function SetBrightnessFromPosition(inputPosition)
-            local pos = brightness.AbsolutePosition
-            local size = brightness.AbsoluteSize
-            PickerVal = math.clamp((inputPosition.X - pos.X) / size.X, 0, 1)
-            UpdateColorFromHSV()
-        end
+        marker.Position = UDim2.new(0.5, markerX, 0.5, markerY)
 
-        wheel.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                wheelDragging = true
-                wheelInput = input
-                SetWheelFromPosition(input.Position)
-            end
-        end)
+        brightnessGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.new(0, 0, 0)),
+            ColorSequenceKeypoint.new(1, Color3.fromHSV(hue, sat, 1))
+        })
 
-        brightnessHit.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                brightnessDragging = true
-                brightnessInput = input
-                SetBrightnessFromPosition(input.Position)
-            end
-        end)
+        brightnessKnob.Position = UDim2.new(val, 0, 0.5, 0)
 
-        UserInputService.InputChanged:Connect(function(input)
-            if wheelDragging and (input == wheelInput or input.UserInputType == Enum.UserInputType.MouseMovement) then
-                SetWheelFromPosition(input.Position)
-            end
-            if brightnessDragging and (input == brightnessInput or input.UserInputType == Enum.UserInputType.MouseMovement) then
-                SetBrightnessFromPosition(input.Position)
-            end
-        end)
+        info.Text = string.format(
+            "HEX: %s    RGB: %d, %d, %d",
+            ColorToHex(color),
+            r,
+            g,
+            b
+        )
 
-        UserInputService.InputEnded:Connect(function(input)
-            if input == wheelInput or (wheelInput and wheelInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1) then
-                wheelDragging = false
-                wheelInput = nil
-            end
-            if input == brightnessInput or (brightnessInput and brightnessInput.UserInputType == Enum.UserInputType.MouseButton1 and input.UserInputType == Enum.UserInputType.MouseButton1) then
-                brightnessDragging = false
-                brightnessInput = nil
-            end
-        end)
-
-        close.Activated:Connect(function()
-            if PickerOriginalLight then
-                SHADER_CONFIG.Light.R = PickerOriginalLight.R
-                SHADER_CONFIG.Light.G = PickerOriginalLight.G
-                SHADER_CONFIG.Light.B = PickerOriginalLight.B
-            end
-            LightColorButton.BackgroundColor3 = GetLightColor()
-            LightPicker.Visible = false
-            LightPickerOpen = false
-        end)
-
-        cancelButton.Activated:Connect(function()
-            if PickerOriginalLight then
-                SHADER_CONFIG.Light.R = PickerOriginalLight.R
-                SHADER_CONFIG.Light.G = PickerOriginalLight.G
-                SHADER_CONFIG.Light.B = PickerOriginalLight.B
-            end
-            LightColorButton.BackgroundColor3 = GetLightColor()
-            LightPicker.Visible = false
-            LightPickerOpen = false
-        end)
-
-        okButton.Activated:Connect(function()
-            LightColorButton.BackgroundColor3 = GetLightColor()
+        if save ~= false then
             ApplySelectedLightColor()
-            LightPicker.Visible = false
-            LightPickerOpen = false
-        end)
-
-        -- Mantém uma referência segura para atualizar a prévia ao reabrir.
-        PickerUpdate = UpdateColorFromHSV
-        LightPicker:SetAttribute("SKYLARP_ColorPickerReady", true)
+        end
     end
 
-    PickerOriginalLight = {
-        R = SHADER_CONFIG.Light.R,
-        G = SHADER_CONFIG.Light.G,
-        B = SHADER_CONFIG.Light.B
-    }
+    local function SetWheelFromPosition(inputPosition)
+        local pos = wheel.AbsolutePosition
+        local size = wheel.AbsoluteSize
+        local center = pos + size / 2
 
-    local current = GetLightColor()
-    PickerHue, PickerSat, PickerVal = Color3.toHSV(current)
+        local dx = inputPosition.X - center.X
+        local dy = inputPosition.Y - center.Y
+        local distance = math.sqrt(dx * dx + dy * dy)
+        local maxDistance = wheelRadius - 2
 
-    if PickerUpdate then
-        PickerUpdate()
+        -- Limita o toque à área circular.
+        local limitedDistance = math.min(distance, maxDistance)
+
+        if distance > 0.001 then
+            local angle = math.atan2(dy, dx)
+            hue = (angle / (math.pi * 2) + 0.25) % 1
+        end
+
+        -- Distância do centro controla a saturação.
+        -- Portanto o marcador pode ser colocado no centro.
+        sat = math.clamp(limitedDistance / maxDistance, 0, 1)
+
+        UpdateColorFromHSV()
     end
 
-    LightColorButton.BackgroundColor3 = current
-    LightPicker.Visible = true
+    local function SetBrightnessFromPosition(inputPosition)
+        local pos = brightness.AbsolutePosition
+        local size = brightness.AbsoluteSize
+        val = math.clamp(
+            (inputPosition.X - pos.X) / size.X,
+            0,
+            1
+        )
+        UpdateColorFromHSV()
+    end
+
+    local wheelDragging = false
+    local wheelInput = nil
+    local brightnessDragging = false
+    local brightnessInput = nil
+
+    wheel.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            wheelDragging = true
+            wheelInput = input
+            SetWheelFromPosition(input.Position)
+        end
+    end)
+
+    brightnessHit.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            brightnessDragging = true
+            brightnessInput = input
+            SetBrightnessFromPosition(input.Position)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if wheelDragging then
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input == wheelInput then
+                SetWheelFromPosition(input.Position)
+            end
+        end
+
+        if brightnessDragging then
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input == brightnessInput then
+                SetBrightnessFromPosition(input.Position)
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if wheelInput and (
+            input == wheelInput
+            or (wheelInput.UserInputType == Enum.UserInputType.MouseButton1
+                and input.UserInputType == Enum.UserInputType.MouseButton1)
+        ) then
+            wheelDragging = false
+            wheelInput = nil
+        end
+
+        if brightnessInput and (
+            input == brightnessInput
+            or (brightnessInput.UserInputType == Enum.UserInputType.MouseButton1
+                and input.UserInputType == Enum.UserInputType.MouseButton1)
+        ) then
+            brightnessDragging = false
+            brightnessInput = nil
+        end
+    end)
+
+    close.Activated:Connect(function()
+        LightPicker.Visible = false
+        LightPickerOpen = false
+    end)
+
+    okButton.Activated:Connect(function()
+        LightPicker.Visible = false
+        LightPickerOpen = false
+        SaveSettings()
+    end)
+
+    cancelButton.Activated:Connect(function()
+        LightPicker.Visible = false
+        LightPickerOpen = false
+    end)
+
+    UpdateColorFromHSV(false)
     LightPickerOpen = true
 end
-
-LightColorButton.Activated:Connect(OpenLightPicker)
 
 
 -- HD NUMERIC INPUT
