@@ -52,11 +52,8 @@ local SHADER_CONFIG = {
     ShaderSkyEnabled = true,
     VignetteEnabled = true,
 
-    -- NOVO:
-    -- Controle da iluminação do HD GRAPHICS
+    -- CONTROLES DA ILUMINAÇÃO DO HD GRAPHICS
     LightEnabled = true,
-    -- Controla somente a cor personalizada da luz.
-    -- A cor escolhida continua salva mesmo quando estiver OFF.
     LightColorEnabled = true,
 
     Light = {
@@ -251,6 +248,7 @@ end
 --==================================================--
 
 local SavedSettings = {}
+local InterfaceSettings = {}
 
 local StretchEnabled = false
 local StretchValue = CONFIG.StretchDefault
@@ -297,6 +295,15 @@ local function LoadSettings()
 end
 
 LoadSettings()
+
+-- RESTORE INTERFACE CONFIG
+pcall(function()
+    if type(SavedSettings.Interface) == "table" then
+        InterfaceSettings = SavedSettings.Interface
+    else
+        InterfaceSettings = {}
+    end
+end)
 
 --==================================================--
 -- RESTORE STRETCH
@@ -496,6 +503,8 @@ local function SaveSettings()
             X = hudX,
             Y = hudY
         },
+
+        Interface = InterfaceSettings or {},
 
         Performance = {},
 
@@ -1478,8 +1487,6 @@ local ShaderOriginal = {
     Brightness = nil,
     Ambient = nil,
     OutdoorAmbient = nil,
-    ColorShiftTop = nil,
-    ColorShiftBottom = nil,
     EnvironmentDiffuseScale = nil,
     EnvironmentSpecularScale = nil,
     GlobalShadows = nil,
@@ -1505,12 +1512,6 @@ local function CaptureLighting()
 
     ShaderOriginal.OutdoorAmbient =
         SafeGet(Lighting, "OutdoorAmbient")
-
-    ShaderOriginal.ColorShiftTop =
-        SafeGet(Lighting, "ColorShift_Top")
-
-    ShaderOriginal.ColorShiftBottom =
-        SafeGet(Lighting, "ColorShift_Bottom")
 
     ShaderOriginal.EnvironmentDiffuseScale =
         SafeGet(
@@ -1603,10 +1604,7 @@ local function ApplyHDLight()
 
     if SHADER_CONFIG.LightEnabled then
 
-        -- A luz continua ativa mesmo quando a COR estiver OFF.
-        -- COR OFF = usa as cores originais do Roblox, sem apagar a luz.
         if SHADER_CONFIG.LightColorEnabled then
-
             SafeSet(
                 Lighting,
                 "Ambient",
@@ -1626,23 +1624,19 @@ local function ApplyHDLight()
                     L.B
                 )
             )
-
         else
-
+            -- COR DA LUZ OFF: volta às cores originais do Lighting.
             SafeSet(
                 Lighting,
                 "Ambient",
                 ShaderOriginal.Ambient
-                    or Color3.fromRGB(128, 128, 128)
             )
 
             SafeSet(
                 Lighting,
                 "OutdoorAmbient",
                 ShaderOriginal.OutdoorAmbient
-                    or Color3.fromRGB(128, 128, 128)
             )
-
         end
 
         SafeSet(
@@ -1657,13 +1651,21 @@ local function ApplyHDLight()
         SafeSet(
             Lighting,
             "Ambient",
-            Color3.fromRGB(0, 0, 0)
+            Color3.fromRGB(
+                0,
+                0,
+                0
+            )
         )
 
         SafeSet(
             Lighting,
             "OutdoorAmbient",
-            Color3.fromRGB(0, 0, 0)
+            Color3.fromRGB(
+                0,
+                0,
+                0
+            )
         )
 
         SafeSet(
@@ -3937,15 +3939,21 @@ local function CreateHDToggle(
     row.Activated:Connect(
         function()
 
-            SHADER_CONFIG[key] =
-                not SHADER_CONFIG[key]
+            local newValue = not SHADER_CONFIG[key]
 
-            if SHADER_CONFIG.Enabled then
-                ApplyShaders()
+            if key == "Enabled" then
+                SetShaderEnabled(newValue)
+            else
+                SHADER_CONFIG[key] = newValue
+
+                if SHADER_CONFIG.Enabled then
+                    ApplyShaders()
+                end
+
+                SaveSettings()
             end
 
             Refresh()
-            SaveSettings()
         end
     )
 
@@ -3955,123 +3963,24 @@ local function CreateHDToggle(
 end
 
 --==================================================--
--- NOVA FUNÇÃO: TOGGLE DA LUZ
---==================================================--
-
-local LightToggle =
-    CreateHDToggle(
-        "LUZ",
-        "LightEnabled"
-    )
-
--- Forward declaration do picker para o botão poder ser criado antes dele.
-local OpenLightPicker
-
--- Cor atual da luz. Declarada antes do botão para evitar referência
--- a função ainda não inicializada durante a criação da interface.
-local function GetLightColor()
-    return RGB(
-        SHADER_CONFIG.Light.R,
-        SHADER_CONFIG.Light.G,
-        SHADER_CONFIG.Light.B
-    )
-end
-
--- Botão de cor fica diretamente dentro do botão LUZ.
--- Assim não ocupa uma linha separada no HD GRAPHICS.
-local LightColorButton = Create(
-    "TextButton",
-    {
-        Size = UDim2.fromOffset(34, 23),
-        Position = UDim2.new(1, -96, 0.5, -11),
-        BackgroundColor3 = GetLightColor(),
-        BorderSizePixel = 0,
-        Text = "",
-        AutoButtonColor = false,
-        ZIndex = 20,
-        Active = true
-    },
-    LightToggle
-)
-AddCorner(LightColorButton, 6)
-local LightColorStroke = AddStroke(LightColorButton, 0)
-LightColorStroke.Thickness = 1.5
-LightColorStroke.Color = Color3.fromRGB(255, 255, 255)
-
-Create(
-    "TextLabel",
-    {
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Text = "●",
-        TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextSize = 13,
-        Font = Enum.Font.GothamBold,
-        ZIndex = 21
-    },
-    LightColorButton
-)
-
--- Botão separado para desligar SOMENTE a cor personalizada.
--- A cor escolhida continua salva e pode ser religada depois.
-local LightColorToggle = Create(
-    "TextButton",
-    {
-        Size = UDim2.fromOffset(34, 23),
-        Position = UDim2.new(1, -132, 0.5, -11),
-        BackgroundColor3 = Color3.fromRGB(65, 120, 80),
-        BorderSizePixel = 0,
-        Text = "COR",
-        TextColor3 = Color3.fromRGB(255, 255, 255),
-        TextSize = 8,
-        Font = Enum.Font.GothamBold,
-        AutoButtonColor = false,
-        ZIndex = 20,
-        Active = true
-    },
-    LightToggle
-)
-AddCorner(LightColorToggle, 6)
-
-local function RefreshLightColorToggle()
-    if SHADER_CONFIG.LightColorEnabled then
-        LightColorToggle.Text = "COR"
-        LightColorToggle.BackgroundColor3 = Color3.fromRGB(65, 120, 80)
-    else
-        LightColorToggle.Text = "COR OFF"
-        LightColorToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 68)
-    end
-end
-
-LightColorToggle.Activated:Connect(function()
-    SHADER_CONFIG.LightColorEnabled = not SHADER_CONFIG.LightColorEnabled
-
-    if SHADER_CONFIG.Enabled and SHADER_CONFIG.LightEnabled then
-        ApplyHDLight()
-    end
-
-    RefreshLightColorToggle()
-    SaveSettings()
-end)
-
-LightColorButton.Activated:Connect(function()
-    OpenLightPicker()
-end)
-
-RefreshLightColorToggle()
-
---==================================================--
---==================================================--
--- COLOR PICKER RGB 24-BIT
--- 16.777.216 CORES POSSÍVEIS
--- RODA COM MARCADOR LIVRE + BRILHO
--- SEM PRÉVIA DA LUZ
+-- COLOR PICKER RGB - ORDEM CORRIGIDA
 --==================================================--
 
 local LightPicker = nil
 local LightPickerOpen = false
 
-local function RGBToHex(r, g, b)
+-- Declarações locais antes de qualquer uso
+local RGBToHex
+local ColorToHex
+local GetLightColor
+local ApplySelectedLightColor
+local OpenLightPicker
+
+--==================================================--
+-- FUNÇÕES AUXILIARES
+--==================================================--
+
+RGBToHex = function(r, g, b)
     return string.format(
         "#%02X%02X%02X",
         math.clamp(math.floor(tonumber(r) or 0), 0, 255),
@@ -4080,7 +3989,11 @@ local function RGBToHex(r, g, b)
     )
 end
 
-local function ColorToHex(color)
+ColorToHex = function(color)
+    if not color then
+        return "#FFFFFF"
+    end
+
     return RGBToHex(
         math.floor(color.R * 255 + 0.5),
         math.floor(color.G * 255 + 0.5),
@@ -4088,14 +4001,27 @@ local function ColorToHex(color)
     )
 end
 
-local function ApplySelectedLightColor()
+GetLightColor = function()
+    return RGB(
+        SHADER_CONFIG.Light.R,
+        SHADER_CONFIG.Light.G,
+        SHADER_CONFIG.Light.B
+    )
+end
+
+ApplySelectedLightColor = function()
     if SHADER_CONFIG.Enabled
-    and SHADER_CONFIG.LightEnabled then
+    and SHADER_CONFIG.LightEnabled
+    and SHADER_CONFIG.LightColorEnabled then
         ApplyHDLight()
     end
 
     SaveSettings()
 end
+
+--==================================================--
+-- FUNÇÃO DO SELETOR DE COR
+--==================================================--
 
 OpenLightPicker = function()
 
@@ -4589,6 +4515,67 @@ OpenLightPicker = function()
     LightPickerOpen = true
 end
 
+--==================================================--
+-- CRIAÇÃO DOS TOGGLES
+--==================================================--
+
+local ShaderToggle = CreateHDToggle(
+    "SHADER",
+    "Enabled"
+)
+
+local LightToggle = CreateHDToggle(
+    "LUZ",
+    "LightEnabled"
+)
+
+local LightColorToggle = CreateHDToggle(
+    "COR DA LUZ",
+    "LightColorEnabled"
+)
+
+--==================================================--
+-- BOTÃO DA COR
+--==================================================--
+
+local LightColorButton = Create(
+    "TextButton",
+    {
+        Size = UDim2.fromOffset(34, 23),
+        Position = UDim2.new(1, -96, 0.5, -11),
+        BackgroundColor3 = GetLightColor(),
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
+        ZIndex = 20,
+        Active = true
+    },
+    LightColorToggle
+)
+
+AddCorner(LightColorButton, 6)
+
+local LightColorStroke = AddStroke(LightColorButton, 0)
+LightColorStroke.Thickness = 1.5
+LightColorStroke.Color = Color3.fromRGB(255, 255, 255)
+
+Create(
+    "TextLabel",
+    {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = "●",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 13,
+        Font = Enum.Font.GothamBold,
+        ZIndex = 21
+    },
+    LightColorButton
+)
+
+LightColorButton.Activated:Connect(function()
+    OpenLightPicker()
+end)
 
 -- HD NUMERIC INPUT
 --==================================================--
@@ -5522,95 +5509,150 @@ local function MakeDraggable(
     handle
 )
 
+    if not object or not handle then
+        return
+    end
+
     local dragging = false
     local dragInput = nil
-    local dragStart
-    local startPosition
+    local dragStart = nil
+    local startPosition = nil
 
-    handle.InputBegan:Connect(
-        function(input)
+    local function getParentMetrics()
+        local parent = object.Parent
 
-            if input.UserInputType ==
-                Enum.UserInputType.Touch
-                or input.UserInputType ==
-                Enum.UserInputType.MouseButton1 then
-
-                dragging = true
-                dragInput = input
-
-                dragStart =
-                    input.Position
-
-                startPosition =
-                    object.Position
-            end
+        if parent and parent:IsA("GuiObject") then
+            return parent.AbsoluteSize, parent.AbsolutePosition
         end
-    )
 
-    UserInputService.InputChanged:Connect(
-        function(input)
+        local camera = Workspace.CurrentCamera
+        return (
+            camera and camera.ViewportSize
+        ) or Vector2.new(800, 600), Vector2.new(0, 0)
+    end
 
-            if not dragging then
+    local function clampXY(x, y)
+        local parentSize = getParentMetrics()
+        local size = object.AbsoluteSize
+        local anchor = object.AnchorPoint
+
+        -- Limita também o tamanho para garantir que sempre exista uma
+        -- posição possível dentro da área pai/tela.
+        local maxWidth = math.max(8, parentSize.X - 4)
+        local maxHeight = math.max(8, parentSize.Y - 4)
+
+        if size.X > maxWidth then
+            object.Size = UDim2.fromOffset(maxWidth, size.Y)
+            size = object.AbsoluteSize
+        end
+
+        if size.Y > maxHeight then
+            object.Size = UDim2.fromOffset(size.X, maxHeight)
+            size = object.AbsoluteSize
+        end
+
+        local minX = size.X * anchor.X + 2
+        local maxX = parentSize.X - size.X * (1 - anchor.X) - 2
+        local minY = size.Y * anchor.Y + 2
+        local maxY = parentSize.Y - size.Y * (1 - anchor.Y) - 2
+
+        if maxX < minX then
+            x = parentSize.X * 0.5
+        else
+            x = math.clamp(x, minX, maxX)
+        end
+
+        if maxY < minY then
+            y = parentSize.Y * 0.5
+        else
+            y = math.clamp(y, minY, maxY)
+        end
+
+        return math.floor(x + 0.5), math.floor(y + 0.5)
+    end
+
+    local function forceInside()
+        local parentSize = getParentMetrics()
+        local x = object.Position.X.Scale * parentSize.X + object.Position.X.Offset
+        local y = object.Position.Y.Scale * parentSize.Y + object.Position.Y.Offset
+        local cx, cy = clampXY(x, y)
+        object.Position = UDim2.fromOffset(cx, cy)
+    end
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType ~= Enum.UserInputType.Touch
+        and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+            return
+        end
+
+        -- Primeiro corrige qualquer posição antiga inválida.
+        forceInside()
+
+        dragging = true
+        dragInput = input
+        dragStart = input.Position
+        startPosition = object.Position
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging or not dragInput then
+            return
+        end
+
+        if dragInput.UserInputType == Enum.UserInputType.Touch then
+            if input ~= dragInput then
                 return
             end
+        elseif input.UserInputType ~= Enum.UserInputType.MouseMovement then
+            return
+        end
 
-            if dragInput
-            and dragInput.UserInputType ==
-                Enum.UserInputType.Touch then
+        local delta = input.Position - dragStart
+        local parentSize = getParentMetrics()
 
-                if input ~= dragInput then
-                    return
-                end
+        local x = startPosition.X.Scale * parentSize.X
+            + startPosition.X.Offset
+            + delta.X
+        local y = startPosition.Y.Scale * parentSize.Y
+            + startPosition.Y.Offset
+            + delta.Y
 
-            elseif input.UserInputType ~=
-                Enum.UserInputType.MouseMovement then
+        local cx, cy = clampXY(x, y)
+        object.Position = UDim2.fromOffset(cx, cy)
+    end)
 
-                return
+    UserInputService.InputEnded:Connect(function(input)
+        if not dragging then
+            return
+        end
+
+        if input == dragInput
+        or (
+            dragInput
+            and dragInput.UserInputType == Enum.UserInputType.MouseButton1
+            and input.UserInputType == Enum.UserInputType.MouseButton1
+        ) then
+            dragging = false
+            dragInput = nil
+            dragStart = nil
+            startPosition = nil
+
+            -- Última correção antes de salvar.
+            forceInside()
+
+            if object == HUD then
+                SavedHUDPosition.X = HUD.Position.X.Offset
+                SavedHUDPosition.Y = HUD.Position.Y.Offset
             end
 
-            local delta =
-                input.Position
-                - dragStart
-
-            object.Position =
-                UDim2.fromOffset(
-                    startPosition.X.Offset
-                    + delta.X,
-
-                    startPosition.Y.Offset
-                    + delta.Y
-                )
+            pcall(SaveSettings)
         end
-    )
+    end)
 
-    UserInputService.InputEnded:Connect(
-        function(input)
-
-            if input == dragInput
-            or (
-                dragInput
-                and dragInput.UserInputType ==
-                    Enum.UserInputType.MouseButton1
-                and input.UserInputType ==
-                    Enum.UserInputType.MouseButton1
-            ) then
-
-                dragging = false
-                dragInput = nil
-
-                if object == HUD then
-
-                    SavedHUDPosition.X =
-                        HUD.Position.X.Offset
-
-                    SavedHUDPosition.Y =
-                        HUD.Position.Y.Offset
-
-                    SaveSettings()
-                end
-            end
-        end
-    )
+    -- Corrige automaticamente quando a GUI é criada ou a resolução muda.
+    task.defer(function()
+        pcall(forceInside)
+    end)
 end
 
 MakeDraggable(Main, Header)
@@ -5858,6 +5900,1023 @@ LocalPlayer.CharacterAdded:Connect(
 
 pcall(ScanWorkspaceOnce)
 pcall(SetupPerformanceConnections)
+
+--==================================================--
+-- INTERFACE EDITOR / CONFIGURADOR VISUAL
+-- ==================================================--
+-- Este editor trabalha diretamente com os objetos reais
+-- do SKYLARP. Cada ID aponta para uma parte existente do GUI.
+-- O tamanho/posição são salvos e reaplicados no próximo load.
+-- ==================================================--
+
+local InterfaceEditor = nil
+local InterfaceEditorOpen = false
+local InterfaceSelectedId = nil
+local InterfaceObjects = {}
+local InterfaceDefaults = {}
+local InterfaceApplying = false
+local InterfaceGuide = nil
+
+local function InterfaceCopyUDim2(value)
+    return {
+        XS = value.X.Scale,
+        XO = value.X.Offset,
+        YS = value.Y.Scale,
+        YO = value.Y.Offset
+    }
+end
+
+local function InterfaceUDim2(data, fallback)
+    if type(data) ~= "table" then
+        return fallback
+    end
+
+    return UDim2.new(
+        tonumber(data.XS) or fallback.X.Scale,
+        tonumber(data.XO) or fallback.X.Offset,
+        tonumber(data.YS) or fallback.Y.Scale,
+        tonumber(data.YO) or fallback.Y.Offset
+    )
+end
+
+local function InterfaceRegister(id, object)
+    if not object or not object:IsA("GuiObject") then
+        return
+    end
+
+    InterfaceObjects[id] = object
+
+    if not InterfaceDefaults[id] then
+        InterfaceDefaults[id] = {
+            Size = InterfaceCopyUDim2(object.Size),
+            Position = InterfaceCopyUDim2(object.Position),
+            AnchorPoint = {
+                X = object.AnchorPoint.X,
+                Y = object.AnchorPoint.Y
+            }
+        }
+    end
+end
+
+-- IDs principais solicitados pelo usuário.
+InterfaceRegister("MAIN_BASE", Main)
+InterfaceRegister("FPS_BOOST", FPSBoostButton)
+InterfaceRegister("STRETCHER", StretcherButton)
+InterfaceRegister("SKY_SELECTOR", SkySelectorButton)
+InterfaceRegister("HD_GRAPHICS", HDGraphicsButton)
+InterfaceRegister("CLOSE_BUTTON", CloseButton)
+InterfaceRegister("BOOST_PANEL", BoostPanel)
+InterfaceRegister("STRETCH_PANEL", StretchPanel)
+InterfaceRegister("SKY_PANEL", SkyPanel)
+InterfaceRegister("HD_PANEL", HDPanel)
+InterfaceRegister("HUD", HUD)
+InterfaceRegister("OPEN_BUTTON", OpenButton)
+InterfaceRegister("SETTINGS_BUTTON", nil) -- preenchido abaixo pelo botão ⚙️
+
+local function InterfaceGetViewport()
+    local camera = Workspace.CurrentCamera
+    if camera then
+        local size = camera.ViewportSize
+        if size.X > 0 and size.Y > 0 then
+            return size
+        end
+    end
+
+    return Vector2.new(800, 600)
+end
+
+local function InterfaceGetParentSize(object)
+    if object.Parent and object.Parent:IsA("GuiObject") then
+        return object.Parent.AbsoluteSize
+    end
+
+    return InterfaceGetViewport()
+end
+
+local function InterfaceClampObject(object)
+    if not object or not object.Parent then
+        return
+    end
+
+    local parent = object.Parent
+    local parentSize = InterfaceGetParentSize(object)
+    if parentSize.X <= 0 or parentSize.Y <= 0 then
+        return
+    end
+
+    local size = object.AbsoluteSize
+    local anchorX = object.AnchorPoint.X
+    local anchorY = object.AnchorPoint.Y
+
+    -- Sempre trabalha em pixels para impedir que o objeto escape.
+    local currentX = parentSize.X * object.Position.X.Scale + object.Position.X.Offset
+    local currentY = parentSize.Y * object.Position.Y.Scale + object.Position.Y.Offset
+
+    -- Se o elemento for maior que o pai, primeiro reduzimos o tamanho.
+    -- Isso evita o caso em que o objeto fica impossível de enquadrar.
+    local maxWidth = math.max(8, parentSize.X - 4)
+    local maxHeight = math.max(8, parentSize.Y - 4)
+
+    if size.X > maxWidth or size.Y > maxHeight then
+        local newW = math.min(size.X, maxWidth)
+        local newH = math.min(size.Y, maxHeight)
+        object.Size = UDim2.fromOffset(newW, newH)
+        size = object.AbsoluteSize
+    end
+
+    -- Limites exatos para o AnchorPoint.
+    local minX = size.X * anchorX + 2
+    local maxX = parentSize.X - size.X * (1 - anchorX) - 2
+    local minY = size.Y * anchorY + 2
+    local maxY = parentSize.Y - size.Y * (1 - anchorY) - 2
+
+    -- Por segurança, se a resolução for muito pequena, centraliza.
+    if maxX < minX then
+        minX = parentSize.X * 0.5
+        maxX = minX
+    end
+    if maxY < minY then
+        minY = parentSize.Y * 0.5
+        maxY = minY
+    end
+
+    local finalX = math.clamp(currentX, minX, maxX)
+    local finalY = math.clamp(currentY, minY, maxY)
+
+    object.Position = UDim2.new(
+        0, math.floor(finalX + 0.5),
+        0, math.floor(finalY + 0.5)
+    )
+end
+
+local function InterfaceClampAll()
+    for _, object in pairs(InterfaceObjects) do
+        pcall(function()
+            InterfaceClampObject(object)
+        end)
+    end
+end
+
+local InterfaceApplyImage
+local InterfaceApplySavedImage
+
+local function InterfaceApplySaved()
+    InterfaceApplying = true
+
+    for id, object in pairs(InterfaceObjects) do
+        local data = InterfaceSettings[id]
+
+        if type(data) == "table" then
+            pcall(function()
+                if type(data.Size) == "table" then
+                    object.Size = InterfaceUDim2(data.Size, object.Size)
+                end
+
+                if type(data.Position) == "table" then
+                    object.Position = InterfaceUDim2(data.Position, object.Position)
+                end
+
+                InterfaceApplySavedImage(id, object, data)
+            end)
+        end
+    end
+
+    task.defer(function()
+        InterfaceClampAll()
+        InterfaceApplying = false
+    end)
+end
+
+local function InterfaceSaveObject(id, object)
+    if not id or not object then
+        return
+    end
+
+    local previous = InterfaceSettings[id]
+    InterfaceSettings[id] = {
+        Size = InterfaceCopyUDim2(object.Size),
+        Position = InterfaceCopyUDim2(object.Position),
+        Image = type(previous) == "table" and previous.Image or ""
+    }
+end
+
+local function InterfaceResetObject(id)
+    local object = InterfaceObjects[id]
+    local default = InterfaceDefaults[id]
+
+    if not object or not default then
+        return
+    end
+
+    InterfaceApplying = true
+
+    pcall(function()
+        object.Size = InterfaceUDim2(default.Size, object.Size)
+        object.Position = InterfaceUDim2(default.Position, object.Position)
+    end)
+
+    InterfaceSettings[id] = nil
+
+    local customImageName = "SKYLARP_CustomImage_" .. tostring(id):gsub("[^%w_]", "_")
+    pcall(function()
+        local image = object:FindFirstChild(customImageName)
+        if image then image:Destroy() end
+        if object:IsA("ImageLabel") or object:IsA("ImageButton") then
+            object.Image = ""
+        end
+    end)
+
+    task.defer(function()
+        InterfaceClampObject(object)
+        InterfaceApplying = false
+        SaveSettings()
+    end)
+end
+
+local function InterfaceResetAll()
+    InterfaceApplying = true
+
+    for id, object in pairs(InterfaceObjects) do
+        local default = InterfaceDefaults[id]
+
+        if default then
+            pcall(function()
+                object.Size = InterfaceUDim2(default.Size, object.Size)
+                object.Position = InterfaceUDim2(default.Position, object.Position)
+            end)
+        end
+    end
+
+    InterfaceSettings = {}
+    task.defer(function()
+        InterfaceClampAll()
+        InterfaceApplying = false
+        SaveSettings()
+    end)
+end
+
+--==================================================--
+-- ⚙️ BOTÃO DE CONFIGURAÇÃO
+--==================================================--
+
+local SettingsButton = Create(
+    "TextButton",
+    {
+        Size = UDim2.fromOffset(34, 34),
+        Position = UDim2.new(1, -43, 0, 10),
+        BackgroundColor3 = Color3.fromRGB(38, 38, 45),
+        BorderSizePixel = 0,
+        Text = "⚙️",
+        TextColor3 = Color3.fromRGB(240, 240, 245),
+        TextSize = 17,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = true,
+        Active = true,
+        ZIndex = 50
+    },
+    Header
+)
+AddCorner(SettingsButton, 9)
+AddStroke(SettingsButton, 0.45)
+InterfaceRegister("SETTINGS_BUTTON", SettingsButton)
+
+-- Deixa espaço para o botão sem alterar o restante do layout.
+Title.Size = UDim2.new(1, -58, 0, 32)
+
+local function InterfaceNumberBox(parent, placeholder, position)
+    local box = Create(
+        "TextBox",
+        {
+            Size = UDim2.fromOffset(70, 34),
+            Position = position,
+            BackgroundColor3 = Color3.fromRGB(31, 31, 37),
+            BorderSizePixel = 0,
+            Text = "",
+            PlaceholderText = placeholder,
+            PlaceholderColor3 = Color3.fromRGB(125, 125, 135),
+            TextColor3 = Color3.fromRGB(240, 240, 245),
+            TextSize = 11,
+            Font = Enum.Font.GothamMedium,
+            ClearTextOnFocus = false,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            ZIndex = 302
+        },
+        parent
+    )
+    AddCorner(box, 7)
+    AddStroke(box, 0.5)
+    return box
+end
+
+local function InterfaceLabel(parent, text, position, size)
+    return Create(
+        "TextLabel",
+        {
+            Size = size or UDim2.fromOffset(55, 25),
+            Position = position,
+            BackgroundTransparency = 1,
+            Text = text,
+            TextColor3 = Color3.fromRGB(210, 210, 218),
+            TextSize = 10,
+            Font = Enum.Font.GothamMedium,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 302
+        },
+        parent
+    )
+end
+
+local function InterfaceButton(parent, text, size, position)
+    return MakeButton(parent, text, size, position)
+end
+
+local InterfaceDragLayer = nil
+local InterfaceDragInput = nil
+local InterfaceDragging = false
+local InterfaceDragStart = nil
+local InterfaceObjectStartAbs = nil
+
+local function InterfaceNormalizeImageId(value)
+    value = tostring(value or "")
+    value = value:gsub("%s+", "")
+    if value == "" then
+        return nil
+    end
+
+    if value:match("^rbxassetid://%d+$") then
+        return value
+    end
+
+    local id = value:match("(%d+)")
+    if id then
+        return "rbxassetid://" .. id
+    end
+
+    return nil
+end
+
+InterfaceApplyImage = function(id, value)
+    local object = InterfaceObjects[id]
+    if not object then return end
+
+    local imageId = InterfaceNormalizeImageId(value)
+    local data = InterfaceSettings[id]
+    if type(data) ~= "table" then
+        data = {}
+        InterfaceSettings[id] = data
+    end
+
+    if object:IsA("ImageLabel") or object:IsA("ImageButton") then
+        object.Image = imageId or ""
+        data.Image = imageId or ""
+    else
+        local childName = "SKYLARP_CustomImage_" .. tostring(id):gsub("[^%w_]", "_")
+        local image = object:FindFirstChild(childName)
+
+        if not imageId then
+            if image then image:Destroy() end
+            data.Image = ""
+            SaveSettings()
+            return
+        end
+
+        if not image or not image:IsA("ImageLabel") then
+            if image then image:Destroy() end
+            image = Create("ImageLabel", {
+                Name = childName,
+                Size = UDim2.fromScale(1, 1),
+                Position = UDim2.fromScale(0, 0),
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                Image = imageId,
+                ScaleType = Enum.ScaleType.Stretch,
+                ZIndex = math.max(1, object.ZIndex + 1),
+                Active = false,
+                Selectable = false
+            }, object)
+        else
+            image.Image = imageId
+        end
+
+        data.Image = imageId
+    end
+
+    SaveSettings()
+end
+
+InterfaceApplySavedImage = function(id, object, data)
+    if type(data) ~= "table" or not data.Image or data.Image == "" then
+        return
+    end
+    InterfaceApplyImage(id, data.Image)
+end
+
+local function InterfaceUpdateDragLayer()
+    if not InterfaceDragLayer then return end
+
+    local object = InterfaceSelectedId and InterfaceObjects[InterfaceSelectedId]
+    if not InterfaceEditorOpen or not object or not object.Parent then
+        InterfaceDragLayer.Visible = false
+        return
+    end
+
+    local p = object.AbsolutePosition
+    local sz = object.AbsoluteSize
+    InterfaceDragLayer.Position = UDim2.fromOffset(math.floor(p.X), math.floor(p.Y))
+    InterfaceDragLayer.Size = UDim2.fromOffset(math.max(8, math.floor(sz.X)), math.max(8, math.floor(sz.Y)))
+    InterfaceDragLayer.Visible = true
+end
+
+local function InterfaceBeginDrag(input)
+    local object = InterfaceSelectedId and InterfaceObjects[InterfaceSelectedId]
+    if not object or not object.Parent then return end
+
+    if input.UserInputType ~= Enum.UserInputType.Touch
+    and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+        return
+    end
+
+    InterfaceDragging = true
+    InterfaceDragInput = input
+    InterfaceDragStart = input.Position
+    InterfaceObjectStartAbs = object.AbsolutePosition
+end
+
+local function InterfaceMoveDrag(input)
+    if not InterfaceDragging or not InterfaceDragInput then return end
+    if input ~= InterfaceDragInput and input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+
+    local object = InterfaceSelectedId and InterfaceObjects[InterfaceSelectedId]
+    if not object or not object.Parent then return end
+
+    local delta = input.Position - InterfaceDragStart
+    local parent = object.Parent
+    local parentAbs = parent:IsA("GuiObject") and parent.AbsolutePosition or Vector2.new(0, 0)
+    local parentSize = InterfaceGetParentSize(object)
+    local size = object.AbsoluteSize
+    local anchor = object.AnchorPoint
+
+    -- O objeto nunca pode ser arrastado para fora dos limites do pai/tela.
+    local topLeft = InterfaceObjectStartAbs + delta
+    local anchorX = topLeft.X - parentAbs.X + size.X * anchor.X
+    local anchorY = topLeft.Y - parentAbs.Y + size.Y * anchor.Y
+
+    local minX = size.X * anchor.X + 2
+    local maxX = parentSize.X - size.X * (1 - anchor.X) - 2
+    local minY = size.Y * anchor.Y + 2
+    local maxY = parentSize.Y - size.Y * (1 - anchor.Y) - 2
+
+    if maxX < minX then
+        anchorX = parentSize.X * 0.5
+    else
+        anchorX = math.clamp(anchorX, minX, maxX)
+    end
+
+    if maxY < minY then
+        anchorY = parentSize.Y * 0.5
+    else
+        anchorY = math.clamp(anchorY, minY, maxY)
+    end
+
+    object.Position = UDim2.new(
+        0, math.floor(anchorX + 0.5),
+        0, math.floor(anchorY + 0.5)
+    )
+
+    InterfaceSaveObject(InterfaceSelectedId, object)
+    InterfaceUpdateGuide()
+    InterfaceRefreshEditor()
+end
+
+local function InterfaceEndDrag(input)
+    if not InterfaceDragging then return end
+    if InterfaceDragInput and input ~= InterfaceDragInput
+    and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+        return
+    end
+
+    InterfaceDragging = false
+    InterfaceDragInput = nil
+    InterfaceDragStart = nil
+    InterfaceObjectStartAbs = nil
+    SaveSettings()
+end
+
+
+local function InterfaceUpdateGuide()
+    if not InterfaceGuide then
+        return
+    end
+
+    local id = InterfaceSelectedId
+    local object = id and InterfaceObjects[id]
+
+    if not object or not object.Parent then
+        InterfaceGuide.Visible = false
+        return
+    end
+
+    pcall(function()
+        local position = object.AbsolutePosition
+        local size = object.AbsoluteSize
+
+        if size.X < 1 or size.Y < 1 then
+            InterfaceGuide.Visible = false
+            return
+        end
+
+        InterfaceGuide.Position = UDim2.fromOffset(
+            math.floor(position.X + 0.5),
+            math.floor(position.Y + 0.5)
+        )
+        InterfaceGuide.Size = UDim2.fromOffset(
+            math.max(8, math.floor(size.X + 0.5)),
+            math.max(8, math.floor(size.Y + 0.5))
+        )
+        InterfaceGuide.Visible = true
+        InterfaceUpdateDragLayer()
+    end)
+end
+
+local function InterfaceRefreshEditor()
+    if not InterfaceEditor or not InterfaceSelectedId then
+        return
+    end
+
+    local object = InterfaceObjects[InterfaceSelectedId]
+    if not object then
+        return
+    end
+
+    local sizeX = InterfaceEditor:FindFirstChild("SizeX")
+    local sizeY = InterfaceEditor:FindFirstChild("SizeY")
+    local posX = InterfaceEditor:FindFirstChild("PosX")
+    local posY = InterfaceEditor:FindFirstChild("PosY")
+
+    if sizeX then sizeX.Text = tostring(math.floor(object.AbsoluteSize.X + 0.5)) end
+    if sizeY then sizeY.Text = tostring(math.floor(object.AbsoluteSize.Y + 0.5)) end
+    if posX then posX.Text = tostring(math.floor(object.Position.X.Offset + 0.5)) end
+    if posY then posY.Text = tostring(math.floor(object.Position.Y.Offset + 0.5)) end
+
+    local selected = InterfaceEditor:FindFirstChild("SelectedName")
+    if selected then
+        selected.Text = "ID: " .. InterfaceSelectedId
+    end
+
+    local imageBox = InterfaceEditor:FindFirstChild("ImageId")
+    if imageBox then
+        local data = InterfaceSettings[InterfaceSelectedId]
+        imageBox.Text = type(data) == "table" and tostring(data.Image or "") or ""
+    end
+
+    InterfaceUpdateGuide()
+    InterfaceUpdateDragLayer()
+end
+
+local function InterfaceSetAbsolute(object, width, height, x, y)
+    if not object then
+        return
+    end
+
+    local parentSize = InterfaceGetParentSize(object)
+    local safeWidth = math.clamp(tonumber(width) or object.AbsoluteSize.X, 20, math.max(20, parentSize.X))
+    local safeHeight = math.clamp(tonumber(height) or object.AbsoluteSize.Y, 20, math.max(20, parentSize.Y))
+
+    object.Size = UDim2.fromOffset(safeWidth, safeHeight)
+    object.Position = UDim2.fromOffset(
+        tonumber(x) or object.Position.X.Offset,
+        tonumber(y) or object.Position.Y.Offset
+    )
+
+    InterfaceClampObject(object)
+end
+
+local function InterfaceSelect(id)
+    if not InterfaceObjects[id] then
+        return
+    end
+
+    InterfaceSelectedId = id
+    local object = InterfaceObjects[id]
+    if object then
+        InterfaceClampObject(object)
+    end
+    InterfaceRefreshEditor()
+    InterfaceUpdateDragLayer()
+end
+
+local function InterfaceIncreaseSize(id)
+    local object = id and InterfaceObjects[id]
+    if not object then return end
+
+    local parentSize = InterfaceGetParentSize(object)
+    local current = object.AbsoluteSize
+    local nextW = math.clamp(math.floor(current.X + 10 + 0.5), 20, math.max(20, parentSize.X))
+    local nextH = math.clamp(math.floor(current.Y + 10 + 0.5), 20, math.max(20, parentSize.Y))
+
+    object.Size = UDim2.fromOffset(nextW, nextH)
+    InterfaceClampObject(object)
+    InterfaceSaveObject(id, object)
+    SaveSettings()
+    InterfaceRefreshEditor()
+    InterfaceUpdateGuide()
+end
+
+local function InterfaceCreateEditor()
+    if InterfaceEditor then
+        InterfaceEditor.Visible = true
+        InterfaceEditorOpen = true
+        InterfaceEditor.ZIndex = 800
+        InterfaceSelect(InterfaceSelectedId or "MAIN_BASE")
+        InterfaceUpdateGuide()
+        InterfaceUpdateDragLayer()
+        return
+    end
+
+    local viewport = InterfaceGetViewport()
+    local panelW = math.clamp(viewport.X - 20, 290, 340)
+    local panelH = math.clamp(viewport.Y - 20, 420, 560)
+
+    InterfaceEditor = Create("Frame", {
+        Name = "SKYLARP_InterfaceEditor",
+        Size = UDim2.fromOffset(panelW, panelH),
+        Position = UDim2.new(0.5, -panelW / 2, 0.5, -panelH / 2),
+        BackgroundColor3 = Color3.fromRGB(18, 18, 23),
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        Visible = true,
+        Active = true,
+        ZIndex = 800
+    }, ScreenGui)
+    AddCorner(InterfaceEditor, 14)
+    AddStroke(InterfaceEditor, 0.2)
+
+    InterfaceGuide = InterfaceGuide or Create("Frame", {
+        Name = "SKYLARP_InterfaceGuide",
+        Size = UDim2.fromOffset(40, 40),
+        Position = UDim2.fromOffset(0, 0),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 2,
+        BorderColor3 = Color3.fromRGB(255, 255, 255),
+        Visible = false,
+        Active = false,
+        Selectable = false,
+        ZIndex = 700
+    }, ScreenGui)
+
+    InterfaceDragLayer = Create("TextButton", {
+        Name = "SKYLARP_InterfaceDragLayer",
+        Size = UDim2.fromOffset(40, 40),
+        Position = UDim2.fromOffset(0, 0),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Text = "",
+        AutoButtonColor = false,
+        Active = true,
+        Selectable = false,
+        Visible = false,
+        ZIndex = 710
+    }, ScreenGui)
+
+    InterfaceDragLayer.InputBegan:Connect(InterfaceBeginDrag)
+    UserInputService.InputChanged:Connect(InterfaceMoveDrag)
+    UserInputService.InputEnded:Connect(InterfaceEndDrag)
+
+    local header = Create("Frame", {
+        Size = UDim2.new(1, -12, 0, 42),
+        Position = UDim2.fromOffset(6, 5),
+        BackgroundColor3 = Color3.fromRGB(28, 28, 35),
+        BorderSizePixel = 0,
+        Active = true,
+        ZIndex = 801
+    }, InterfaceEditor)
+    AddCorner(header, 10)
+
+    Create("TextLabel", {
+        Size = UDim2.new(1, -50, 1, 0),
+        Position = UDim2.fromOffset(12, 0),
+        BackgroundTransparency = 1,
+        Text = "⚙️  MODIFICAR INTERFACE",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 13,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 802
+    }, header)
+
+    local close = Create("TextButton", {
+        Size = UDim2.fromOffset(32, 30),
+        Position = UDim2.new(1, -37, 0, 6),
+        BackgroundColor3 = Color3.fromRGB(50, 50, 58),
+        BorderSizePixel = 0,
+        Text = "CANCELAR",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 9,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = true,
+        Active = true,
+        ZIndex = 803
+    }, header)
+    AddCorner(close, 8)
+
+    local selected = Create("TextLabel", {
+        Name = "SelectedName",
+        Size = UDim2.new(1, -20, 0, 22),
+        Position = UDim2.fromOffset(10, 51),
+        BackgroundTransparency = 1,
+        Text = "ID: MAIN_BASE",
+        TextColor3 = Color3.fromRGB(220, 220, 230),
+        TextSize = 11,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 802
+    }, InterfaceEditor)
+
+    local list = Create("ScrollingFrame", {
+        Name = "PartList",
+        Size = UDim2.new(1, -20, 0, math.max(145, panelH - 360)),
+        Position = UDim2.fromOffset(10, 75),
+        BackgroundColor3 = Color3.fromRGB(25, 25, 31),
+        BorderSizePixel = 0,
+        ScrollBarThickness = 3,
+        CanvasSize = UDim2.fromOffset(0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        Active = true,
+        ZIndex = 802
+    }, InterfaceEditor)
+    AddCorner(list, 8)
+
+    local layout = Create("UIListLayout", {
+        Padding = UDim.new(0, 4),
+        SortOrder = Enum.SortOrder.LayoutOrder
+    }, list)
+
+    local ids = {
+        "MAIN_BASE", "FPS_BOOST", "STRETCHER", "SKY_SELECTOR", "HD_GRAPHICS",
+        "CLOSE_BUTTON", "BOOST_PANEL", "STRETCH_PANEL", "SKY_PANEL", "HD_PANEL",
+        "HUD", "OPEN_BUTTON", "SETTINGS_BUTTON"
+    }
+
+    for i, id in ipairs(ids) do
+        if InterfaceObjects[id] then
+            local b = Create("TextButton", {
+                Size = UDim2.new(1, -8, 0, 30),
+                BackgroundColor3 = Color3.fromRGB(38, 38, 46),
+                BorderSizePixel = 0,
+                Text = "  " .. id,
+                TextColor3 = Color3.fromRGB(235, 235, 240),
+                TextSize = 9,
+                Font = Enum.Font.GothamMedium,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                AutoButtonColor = true,
+                Active = true,
+                LayoutOrder = i,
+                ZIndex = 803
+            }, list)
+            AddCorner(b, 6)
+            b.Activated:Connect(function()
+                InterfaceSelect(id)
+                InterfaceUpdateDragLayer()
+            end)
+        end
+    end
+
+    local sizeButton = Create("TextButton", {
+        Name = "IncreaseSize",
+        Size = UDim2.new(1, -20, 0, 38),
+        Position = UDim2.new(0, 10, 1, -168),
+        BackgroundColor3 = Color3.fromRGB(55, 85, 135),
+        BorderSizePixel = 0,
+        Text = "AUMENTAR O TAMANHO",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 10,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = true,
+        Active = true,
+        ZIndex = 804
+    }, InterfaceEditor)
+    AddCorner(sizeButton, 8)
+
+    Create("TextLabel", {
+        Size = UDim2.new(1, -20, 0, 18),
+        Position = UDim2.new(0, 10, 0, panelH - 142),
+        BackgroundTransparency = 1,
+        Text = "ID DA IMAGEM ROBLOX",
+        TextColor3 = Color3.fromRGB(185, 185, 195),
+        TextSize = 8,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 804
+    }, InterfaceEditor)
+
+    local imageBox = Create("TextBox", {
+        Name = "ImageId",
+        Size = UDim2.new(1, -110, 0, 34),
+        Position = UDim2.fromOffset(10, panelH - 120),
+        BackgroundColor3 = Color3.fromRGB(31, 31, 37),
+        BorderSizePixel = 0,
+        Text = "",
+        PlaceholderText = "ID DA IMAGEM ROBLOX",
+        PlaceholderColor3 = Color3.fromRGB(125, 125, 135),
+        TextColor3 = Color3.fromRGB(240, 240, 245),
+        TextSize = 10,
+        Font = Enum.Font.GothamMedium,
+        ClearTextOnFocus = false,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        ZIndex = 804
+    }, InterfaceEditor)
+    AddCorner(imageBox, 7)
+    AddStroke(imageBox, 0.5)
+
+    local imageButton = Create("TextButton", {
+        Name = "ApplyImage",
+        Size = UDim2.fromOffset(90, 34),
+        Position = UDim2.new(1, -100, 0, panelH - 120),
+        BackgroundColor3 = Color3.fromRGB(55, 85, 135),
+        BorderSizePixel = 0,
+        Text = "IMAGEM",
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        TextSize = 9,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = true,
+        Active = true,
+        ZIndex = 805
+    }, InterfaceEditor)
+    AddCorner(imageButton, 7)
+
+    local hint = Create("TextLabel", {
+        Size = UDim2.new(1, -20, 0, 18),
+        Position = UDim2.new(0, 10, 1, -145),
+        BackgroundTransparency = 1,
+        Text = "Arraste o elemento selecionado para mover",
+        TextColor3 = Color3.fromRGB(150, 150, 160),
+        TextSize = 8,
+        Font = Enum.Font.GothamMedium,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 804
+    }, InterfaceEditor)
+
+    local resetButton = Create("TextButton", {
+        Name = "ResetPart",
+        Size = UDim2.fromOffset(98, 28),
+        Position = UDim2.new(0, 10, 1, -35),
+        BackgroundColor3 = Color3.fromRGB(42, 42, 50),
+        BorderSizePixel = 0,
+        Text = "RESET PARTE",
+        TextColor3 = Color3.fromRGB(240, 240, 245),
+        TextSize = 8,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = true,
+        Active = true,
+        ZIndex = 804
+    }, InterfaceEditor)
+    AddCorner(resetButton, 7)
+
+    local resetAllButton = Create("TextButton", {
+        Name = "ResetAll",
+        Size = UDim2.fromOffset(98, 28),
+        Position = UDim2.new(0.5, -49, 1, -35),
+        BackgroundColor3 = Color3.fromRGB(42, 42, 50),
+        BorderSizePixel = 0,
+        Text = "REST CONFIG",
+        TextColor3 = Color3.fromRGB(240, 240, 245),
+        TextSize = 8,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = true,
+        Active = true,
+        ZIndex = 804
+    }, InterfaceEditor)
+    AddCorner(resetAllButton, 7)
+
+    local autoButton = Create("TextButton", {
+        Name = "AutoFit",
+        Size = UDim2.fromOffset(98, 28),
+        Position = UDim2.new(1, -108, 1, -35),
+        BackgroundColor3 = Color3.fromRGB(42, 42, 50),
+        BorderSizePixel = 0,
+        Text = "AUTO FIT",
+        TextColor3 = Color3.fromRGB(240, 240, 245),
+        TextSize = 8,
+        Font = Enum.Font.GothamBold,
+        AutoButtonColor = true,
+        Active = true,
+        ZIndex = 804
+    }, InterfaceEditor)
+    AddCorner(autoButton, 7)
+
+    local function closeEditor()
+        InterfaceEditor.Visible = false
+        InterfaceEditorOpen = false
+        InterfaceDragging = false
+        if InterfaceGuide then InterfaceGuide.Visible = false end
+        if InterfaceDragLayer then InterfaceDragLayer.Visible = false end
+        ShowMain()
+    end
+
+    close.Activated:Connect(closeEditor)
+
+    sizeButton.Activated:Connect(function()
+        InterfaceIncreaseSize(InterfaceSelectedId)
+        InterfaceUpdateDragLayer()
+    end)
+
+    imageButton.Activated:Connect(function()
+        InterfaceApplyImage(InterfaceSelectedId, imageBox.Text)
+        InterfaceRefreshEditor()
+    end)
+
+    resetButton.Activated:Connect(function()
+        if InterfaceSelectedId then
+            InterfaceResetObject(InterfaceSelectedId)
+            InterfaceRefreshEditor()
+            InterfaceUpdateGuide()
+            InterfaceUpdateDragLayer()
+        end
+    end)
+
+    resetAllButton.Activated:Connect(function()
+        InterfaceResetAll()
+        InterfaceRefreshEditor()
+        InterfaceUpdateGuide()
+        InterfaceUpdateDragLayer()
+    end)
+
+    autoButton.Activated:Connect(function()
+        InterfaceClampAll()
+        InterfaceRefreshEditor()
+        InterfaceUpdateGuide()
+        InterfaceUpdateDragLayer()
+        SaveSettings()
+    end)
+
+    MakeDraggable(InterfaceEditor, header)
+
+    InterfaceApplySaved()
+    InterfaceSelect("MAIN_BASE")
+    InterfaceRefreshEditor()
+    InterfaceUpdateGuide()
+    InterfaceUpdateDragLayer()
+end
+
+SettingsButton.Activated:Connect(function()
+    if InterfaceEditorOpen then
+        if InterfaceEditor then
+            InterfaceEditor.Visible = false
+        end
+        InterfaceEditorOpen = false
+        if InterfaceGuide then
+            InterfaceGuide.Visible = false
+        end
+        if InterfaceDragLayer then
+            InterfaceDragLayer.Visible = false
+        end
+        ShowMain()
+    else
+        HideAllPanels()
+        if InterfaceEditor then
+            InterfaceEditor.Visible = true
+            InterfaceEditorOpen = true
+            InterfaceSelect(InterfaceSelectedId or "MAIN_BASE")
+            InterfaceUpdateGuide()
+        else
+            InterfaceCreateEditor()
+        end
+        HUD.Visible = false
+        OpenButton.Visible = false
+    end
+end)
+
+-- Cria o editor somente no primeiro toque no ⚙️.
+InterfaceApplySaved()
+
+-- Mantém todas as partes dentro da tela quando a resolução muda.
+pcall(function()
+    local camera = Workspace.CurrentCamera
+    if camera then
+        camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+            task.defer(function()
+                InterfaceClampAll()
+                if InterfaceEditor and InterfaceEditor.Visible then
+                    local viewport = InterfaceGetViewport()
+                    local w = math.min(350, math.max(300, viewport.X - 20))
+                    local h = math.min(560, math.max(480, viewport.Y - 20))
+                    InterfaceEditor.Size = UDim2.fromOffset(w, h)
+                    InterfaceEditor.Position = UDim2.new(0.5, -w / 2, 0.5, -h / 2)
+                end
+            end)
+        end)
+    end
+end)
+
+-- A seleção é feita pelo painel do editor. O elemento selecionado é
+-- movimentado pelo InterfaceDragLayer, evitando disparar os botões reais.
+
+-- Atualiza o guia em tempo real enquanto o editor estiver aberto.
+RunService.RenderStepped:Connect(function()
+    if InterfaceEditorOpen and InterfaceEditor and InterfaceEditor.Visible then
+        InterfaceUpdateGuide()
+    end
+end)
 
 --==================================================--
 -- INITIAL GUI
